@@ -560,7 +560,7 @@ set(OPENMW_COMMON
 	# FFmpeg's arm64 NEON asm exports global const tables (ff_vp9_subpel_filters, ...);
 	# PC-relative relocs against those preemptible symbols make lld reject the shared-lib
 	# link. -Bsymbolic binds defined symbols locally (non-preemptible) so they link.
-	-DCMAKE_SHARED_LINKER_FLAGS=-Wl,-Bsymbolic
+	-DCMAKE_SHARED_LINKER_FLAGS=-Wl,-Bsymbolic,--build-id=sha1
 )
 
 # NOTE: vanilla OpenMW builds apps/openmw/android_main.cpp, but openmw-vr renamed it to
@@ -575,6 +575,7 @@ ExternalProject_Add(openmw
 
 	# Build this repo's source directly (separate binary dir keeps the source tree clean),
 	# so the Android/Quest port is fully self-contained in this repo.
+	BUILD_ALWAYS TRUE
 	SOURCE_DIR ${openmw_vr_src}
 	DOWNLOAD_COMMAND ""
 	PATCH_COMMAND ""

@@ -12,7 +12,7 @@ LTO="false"
 BUILD_TYPE="release"
 CFLAGS="-fPIC"
 CXXFLAGS="-fPIC -frtti -fexceptions"
-LDFLAGS=""
+LDFLAGS="-Wl,--build-id=sha1"
 
 usage() {
 	echo "Usage: ./build.sh [--help] [--asan] [--arch arch] [--debug|--release]"
@@ -85,8 +85,8 @@ if [ $ASAN = true ]; then
 fi
 
 if [ $BUILD_TYPE = "release" ]; then
-	CFLAGS="$CFLAGS -O3"
-	CXXFLAGS="$CXXFLAGS -O3"
+	CFLAGS="$CFLAGS -O2 -g -fno-omit-frame-pointer"
+	CXXFLAGS="$CXXFLAGS -O2 -g -fno-omit-frame-pointer"
 else
 	CFLAGS="$CFLAGS -O0 -g"
 	CXXFLAGS="$CXXFLAGS -O0 -g"
@@ -234,6 +234,11 @@ cp "./build/$ARCH/sdl2-prefix/src/sdl2-build/obj/local/$ABI/libSDL2.so" "./symbo
 cp "./build/$ARCH/openmw-prefix/src/openmw-build/libopenmw.so" "./symbols/$ABI/libopenmw.so"
 cp "./build/$ARCH/gl4es-prefix/src/gl4es-build/obj/local/$ABI/libGL.so" "./symbols/$ABI/"
 cp "../app/src/main/jniLibs/$ABI/libc++_shared.so" "./symbols/$ABI/"
+find build/$ARCH/openmw-prefix/ -name libopenxr_loader.so -exec cp '{}' "./symbols/$ABI/" \;
+git -C "$DIR/../.." rev-parse HEAD > "./symbols/$ABI/SOURCE_COMMIT.txt"
+for lib in ./symbols/$ABI/*.so; do
+    "$DIR/toolchain/ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf" -n "$lib"
+done > "./symbols/$ABI/BUILD_IDS.txt"
 
 if [ $ASAN = true ]; then
 	cp ./toolchain/$ARCH/lib64/clang/*/lib/linux/libclang_rt.asan-$ASAN_ARCH-android.so "./symbols/$ABI/"
