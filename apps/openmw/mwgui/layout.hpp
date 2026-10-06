@@ -35,10 +35,10 @@ namespace MWGui
             }
         }
 
-        MyGUI::Widget* getWidget(std::string_view name) const;
+        MyGUI::Widget* getWidget(std::string_view name);
 
         template <typename T>
-        void getWidget(T*& widget, std::string_view name) const
+        void getWidget(T*& widget, std::string_view name)
         {
             MyGUI::Widget* w = getWidget(name);
             T* cast = w->castType<T>(false);

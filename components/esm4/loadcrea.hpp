@@ -44,7 +44,7 @@ namespace ESM4
 
     struct Creature
     {
-        enum ActorBaseFlagsTes4
+        enum ACBS_TES4
         {
             TES4_Essential = 0x000002,
             TES4_WeapAndShield = 0x000004,
@@ -59,7 +59,7 @@ namespace ESM4
             TES4_NoCorpseCheck = 0x100000 // opposite of npc_
         };
 
-        enum ActorBaseFlagsFo3
+        enum ACBS_FO3
         {
             FO3_Biped = 0x00000001,
             FO3_Essential = 0x00000002,

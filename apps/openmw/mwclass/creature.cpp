@@ -133,8 +133,7 @@ namespace MWClass
 
             // creature stats
             for (size_t i = 0; i < ref->mBase->mData.mAttributes.size(); ++i)
-                data->mCreatureStats.setAttribute(ESM::Attribute::indexToRefId(static_cast<int>(i)),
-                    static_cast<float>(ref->mBase->mData.mAttributes[i]));
+                data->mCreatureStats.setAttribute(ESM::Attribute::indexToRefId(i), ref->mBase->mData.mAttributes[i]);
             data->mCreatureStats.setHealth(static_cast<float>(ref->mBase->mData.mHealth));
             data->mCreatureStats.setMagicka(static_cast<float>(ref->mBase->mData.mMana));
             data->mCreatureStats.setFatigue(static_cast<float>(ref->mBase->mData.mFatigue));
@@ -393,14 +392,14 @@ namespace MWClass
         {
             MWMechanics::CreatureStats& statsAttacker = attacker.getClass().getCreatureStats(attacker);
             // First handle the attacked actor
-            if (!stats.getHitAttemptActor().isSet()
+            if ((stats.getHitAttemptActorId() == -1)
                 && (statsAttacker.getAiSequence().isInCombat(ptr) || attacker == MWMechanics::getPlayer()))
-                stats.setHitAttemptActor(attacker.getCellRef().getRefNum());
+                stats.setHitAttemptActorId(statsAttacker.getActorId());
 
             // Next handle the attacking actor
-            if (!statsAttacker.getHitAttemptActor().isSet()
+            if ((statsAttacker.getHitAttemptActorId() == -1)
                 && (statsAttacker.getAiSequence().isInCombat(ptr) || attacker == MWMechanics::getPlayer()))
-                statsAttacker.setHitAttemptActor(ptr.getCellRef().getRefNum());
+                statsAttacker.setHitAttemptActorId(stats.getActorId());
         }
 
         if (!object.empty())
@@ -786,11 +785,11 @@ namespace MWClass
         switch (skillRecord->mData.mSpecialization)
         {
             case ESM::Class::Combat:
-                return static_cast<float>(ref->mBase->mData.mCombat);
+                return ref->mBase->mData.mCombat;
             case ESM::Class::Magic:
-                return static_cast<float>(ref->mBase->mData.mMagic);
+                return ref->mBase->mData.mMagic;
             case ESM::Class::Stealth:
-                return static_cast<float>(ref->mBase->mData.mStealth);
+                return ref->mBase->mData.mStealth;
             default:
                 throw std::runtime_error("invalid specialisation");
         }
@@ -916,7 +915,7 @@ namespace MWClass
 
     void Creature::setBaseAISetting(const ESM::RefId& id, MWMechanics::AiSetting setting, int value) const
     {
-        MWMechanics::setBaseAISetting<ESM::Creature>(id, setting, static_cast<unsigned char>(value));
+        MWMechanics::setBaseAISetting<ESM::Creature>(id, setting, value);
     }
 
     void Creature::modifyBaseInventory(const ESM::RefId& actorId, const ESM::RefId& itemId, int amount) const

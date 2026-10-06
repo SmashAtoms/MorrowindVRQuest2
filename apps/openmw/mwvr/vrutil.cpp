@@ -1,11 +1,9 @@
 #include "vrutil.hpp"
-#include "apps/openmw/mwmechanics/creaturestats.hpp"
-#include "components/esm3/loadmgef.hpp"
-#include "openxrinput.hpp"
 #include "vranimation.hpp"
 #include "vrgui.hpp"
 #include "vrinputmanager.hpp"
 #include "vrpointer.hpp"
+#include "openxrinput.hpp"
 
 #include "../mwbase/environment.hpp"
 #include "../mwbase/windowmanager.hpp"
@@ -70,17 +68,11 @@ namespace MWVR
                     world->getMaxActivationDistance() * 50, true, ignoreMask);
             else
             {
-                float activationDistance = world->getMaxActivationDistance();
+                float activationDistance = 0.f;
                 if (allowTelekinesis)
-                {
-                    auto player = MWMechanics::getPlayer();
-                    const float telekinesisMagnitude = player.getClass()
-                                                           .getCreatureStats(player)
-                                                           .getMagicEffects()
-                                                           .getOrDefault(ESM::MagicEffect::Telekinesis)
-                                                           .getMagnitude();
-                    activationDistance += std::ceil(Constants::UnitsPerFoot) * telekinesisMagnitude;
-                }
+                    activationDistance = world->getActivationDistancePlusTelekinesis();
+                else
+                    activationDistance = world->getMaxActivationDistance();
 
                 auto distance = world->getTargetObject(
                     result, pose.position.asMWUnits(), pose.orientation, activationDistance, true, ignoreMask);

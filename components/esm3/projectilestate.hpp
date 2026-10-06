@@ -24,7 +24,7 @@ namespace ESM
         Vector3 mPosition;
         Quaternion mOrientation;
 
-        RefNum mCaster;
+        int32_t mActorId;
 
         void load(ESMReader& esm);
         void save(ESMWriter& esm) const;

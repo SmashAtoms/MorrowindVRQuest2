@@ -117,7 +117,7 @@ namespace Stereo
         return *sInstance;
     }
 
-    Manager::Manager(osgViewer::Viewer* viewer, bool enableStereo, float near, float far, int samples)
+    Manager::Manager(osgViewer::Viewer* viewer, bool enableStereo, double near, double far, int samples)
         : mViewer(viewer)
         , mMainCamera(mViewer->getCamera())
         , mUpdateCallback(new StereoUpdateCallback(this))
@@ -190,8 +190,8 @@ namespace Stereo
     {
         if (mEyeResolutionOverriden)
             return mEyeResolutionOverride;
-        auto width = static_cast<int>(mMainCamera->getViewport()->width() / 2);
-        auto height = static_cast<int>(mMainCamera->getViewport()->height());
+        auto width = mMainCamera->getViewport()->width() / 2;
+        auto height = mMainCamera->getViewport()->height();
 
         return osg::Vec2i(width, height);
     }
@@ -408,6 +408,8 @@ namespace Stereo
 
     bool getStereo()
     {
+        // MERGETODO: Make sure VR::getVR() is used to determine sStereoEnabled
+//## VR_PATCH END
         return sStereoEnabled;
     }
 

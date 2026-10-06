@@ -1,32 +1,5 @@
-#ifdef _WIN32
-// Need to include windows header before anything else so we can control use of UNICODE and LEANANDMEAN.
-#ifdef NOGDI
-#undef NOGDI
-#endif
-
-#ifdef UNICODE
-#undef UNICODE
-#endif
-
-#ifdef _UNICODE
-#undef _UNICODE
-#endif
-
-#include <Windows.h>
-#include <objbase.h>
-
-#ifdef XR_USE_GRAPHICS_API_D3D11
-#include <d3d11_1.h>
-#endif
-#endif
-
-// SDL_syswm.h pulls in desktop window-system headers (X11/Wayland) and is not
-// shipped in the Android SDL build; the Android path uses EGL directly instead.
-#ifndef __ANDROID__
-#include <SDL2/SDL_syswm.h>
-#endif
-#include <components/misc/strings/algorithm.hpp>
 #include <components/misc/strings/lower.hpp>
+#include <components/misc/strings/algorithm.hpp>
 #include <components/sceneutil/color.hpp>
 #include <components/sceneutil/depth.hpp>
 
@@ -36,20 +9,24 @@
 #include "session.hpp"
 #include "swapchain.hpp"
 
-// The OpenXR SDK's platform headers assume we've included platform headers.
-// NOTE: __ANDROID__ must be checked before __linux__ (Android defines both),
-// otherwise we pull in desktop GLX/Xlib which does not exist on the Quest.
+// The OpenXR SDK's platform headers assume we've included platform headers
 #ifdef _WIN32
+#ifdef NOGDI
+#undef NOGDI
+#endif
+#include <Windows.h>
+#include <objbase.h>
 
-#elif defined(__ANDROID__)
-#include <EGL/egl.h>
-#include <jni.h> // required before openxr_platform.h (Android structs use jobject)
-#include <osg/GL> // GL types via OSG/gl4es, consistent with the rest of openmw
-#else
-#include <EGL/egl.h>
+#ifdef XR_USE_GRAPHICS_API_D3D11
+#include <d3d11_1.h>
+#endif
+
+#elif __linux__
 #include <GL/glx.h>
 #undef None
 
+#else
+#error Unsupported platform
 #endif
 
 #include <openxr/openxr.h>
@@ -108,9 +85,8 @@ namespace XR
 
     PlatformPrivate::~PlatformPrivate() {}
 
-    Platform::Platform(osg::GraphicsContext* gc, SDL_Window* window)
+    Platform::Platform(osg::GraphicsContext* gc)
         : mPrivate(new PlatformPrivate(gc))
-        , mWindow(window)
     {
         mMWColorFormatsGL.push_back(GL_SRGB8);
         mMWColorFormatsGL.push_back(GL_SRGB8_ALPHA8);
@@ -179,19 +155,6 @@ namespace XR
 
     bool Platform::selectOpenGL()
     {
-#ifdef XR_USE_GRAPHICS_API_OPENGL_ES
-        // Android / Quest: OpenGL ES via XR_KHR_opengl_es_enable. (No "disable" config toggle here:
-        // there is no registered [VR Debug] setting for it, and GLES is the only option on Android.)
-        if (XR::Extensions::instance().extensionSupported(XR_KHR_OPENGL_ES_ENABLE_EXTENSION_NAME))
-        {
-            Extensions::instance().selectGraphicsAPIExtension(XR_KHR_OPENGL_ES_ENABLE_EXTENSION_NAME);
-            return true;
-        }
-        else
-            Log(Debug::Warning) << "Warning: Failed to select OpenGL ES swapchains: OpenXR runtime does not support "
-                                   "essential extension '"
-                                << XR_KHR_OPENGL_ES_ENABLE_EXTENSION_NAME << "'";
-#endif
 #ifdef XR_USE_GRAPHICS_API_OPENGL
 
         if (Settings::Manager::getBool(std::string() + "disable " + XR_KHR_OPENGL_ENABLE_EXTENSION_NAME, "VR Debug"))
@@ -203,9 +166,6 @@ namespace XR
         if (XR::Extensions::instance().extensionSupported(XR_KHR_OPENGL_ENABLE_EXTENSION_NAME))
         {
             Extensions::instance().selectGraphicsAPIExtension(XR_KHR_OPENGL_ENABLE_EXTENSION_NAME);
-#ifdef __linux__
-            Extensions::instance().requestExtension("XR_MNDX_egl_enable");
-#endif
             return true;
         }
         else
@@ -348,76 +308,24 @@ namespace XR
         {
             throw std::logic_error("Enum value not implemented");
         }
-#elif defined(__ANDROID__)
-        apiName = "OpenGL ES";
-        // Get system requirements (GLES variant)
-        PFN_xrGetOpenGLESGraphicsRequirementsKHR p_getRequirements = nullptr;
-        xrGetInstanceProcAddr(instance, "xrGetOpenGLESGraphicsRequirementsKHR",
-            reinterpret_cast<PFN_xrVoidFunction*>(&p_getRequirements));
-        XrGraphicsRequirementsOpenGLESKHR requirements{};
-        requirements.type = XR_TYPE_GRAPHICS_REQUIREMENTS_OPENGL_ES_KHR;
-        if (p_getRequirements)
+#elif __linux__
+        {
+            apiName = "OpenGL";
+            // Get system requirements
+            PFN_xrGetOpenGLGraphicsRequirementsKHR p_getRequirements = nullptr;
+            xrGetInstanceProcAddr(instance, "xrGetOpenGLGraphicsRequirementsKHR",
+                reinterpret_cast<PFN_xrVoidFunction*>(&p_getRequirements));
+            XrGraphicsRequirementsOpenGLKHR requirements{};
+            requirements.type = XR_TYPE_GRAPHICS_REQUIREMENTS_OPENGL_KHR;
             CHECK_XRCMD(p_getRequirements(instance, systemId, &requirements));
 
-        // The Quest runtime binds to the EGL context SDL/OSG already made current.
-        EGLDisplay eglDisplay = eglGetCurrentDisplay();
-        EGLContext eglContext = eglGetCurrentContext();
-        EGLConfig eglConfig = 0;
-        if (eglDisplay != EGL_NO_DISPLAY && eglContext != EGL_NO_CONTEXT)
-        {
-            // OpenXR wants the EGLConfig; EGL only lets us query its id, so look it up.
-            EGLint configId = 0;
-            eglQueryContext(eglDisplay, eglContext, EGL_CONFIG_ID, &configId);
-            EGLint numConfigs = 0;
-            eglGetConfigs(eglDisplay, nullptr, 0, &numConfigs);
-            std::vector<EGLConfig> configs(numConfigs);
-            eglGetConfigs(eglDisplay, configs.data(), numConfigs, &numConfigs);
-            for (EGLint i = 0; i < numConfigs; i++)
+            // TODO: Actually get system version
+            const XrVersion systemApiVersion = XR_MAKE_VERSION(4, 6, 0);
+            if (requirements.minApiVersionSupported > systemApiVersion)
             {
-                EGLint id = 0;
-                eglGetConfigAttrib(eglDisplay, configs[i], EGL_CONFIG_ID, &id);
-                if (id == configId)
-                {
-                    eglConfig = configs[i];
-                    break;
-                }
+                std::cout << "Runtime does not support desired Graphics API and/or version" << std::endl;
             }
-        }
-        else
-        {
-            Log(Debug::Warning) << "No current EGL context while creating the OpenXR session";
-        }
 
-        XrGraphicsBindingOpenGLESAndroidKHR graphicsBindings{};
-        graphicsBindings.type = XR_TYPE_GRAPHICS_BINDING_OPENGL_ES_ANDROID_KHR;
-        graphicsBindings.display = eglDisplay;
-        graphicsBindings.config = eglConfig;
-        graphicsBindings.context = eglContext;
-
-        XrSessionCreateInfo createInfoGLES{};
-        createInfoGLES.type = XR_TYPE_SESSION_CREATE_INFO;
-        createInfoGLES.next = &graphicsBindings;
-        createInfoGLES.systemId = systemId;
-        res = CHECK_XRCMD(xrCreateSession(instance, &createInfoGLES, &session));
-#elif __linux__
-        apiName = "OpenGL";
-        // Get system requirements
-        PFN_xrGetOpenGLGraphicsRequirementsKHR p_getRequirements = nullptr;
-        xrGetInstanceProcAddr(
-            instance, "xrGetOpenGLGraphicsRequirementsKHR", reinterpret_cast<PFN_xrVoidFunction*>(&p_getRequirements));
-        XrGraphicsRequirementsOpenGLKHR requirements{};
-        requirements.type = XR_TYPE_GRAPHICS_REQUIREMENTS_OPENGL_KHR;
-        CHECK_XRCMD(p_getRequirements(instance, systemId, &requirements));
-
-        // TODO: Actually get system version
-        const XrVersion systemApiVersion = XR_MAKE_VERSION(4, 6, 0);
-        if (requirements.minApiVersionSupported > systemApiVersion)
-        {
-            std::cout << "Runtime does not support desired Graphics API and/or version" << std::endl;
-        }
-
-        if (glXGetCurrentContext())
-        {
             // Create Session
             GLXContext glxContext = glXGetCurrentContext();
             GLXDrawable glxDrawable = glXGetCurrentDrawable();
@@ -447,64 +355,6 @@ namespace XR
             createInfo.systemId = systemId;
             res = CHECK_XRCMD(xrCreateSession(instance, &createInfo, &session));
         }
-        else if (Extensions::instance().extensionEnabled("XR_MNDX_egl_enable"))
-        {
-            XrGraphicsBindingEGLMNDX graphicsBindings;
-            memset(&graphicsBindings, 0, sizeof(graphicsBindings));
-
-            graphicsBindings.type = XR_TYPE_GRAPHICS_BINDING_EGL_MNDX;
-            graphicsBindings.next = NULL;
-
-            SDL_SysWMinfo wmInfo;
-            SDL_VERSION(&wmInfo.version);
-
-            if (SDL_GetWindowWMInfo(mWindow, &wmInfo))
-            {
-                // Only supporting wayland for now
-                struct wl_display* wlDisplay = wmInfo.info.wl.display;
-                if (wlDisplay)
-                {
-                    // EGL display must correspond to the Wayland display
-                    EGLDisplay eglDisplay = eglGetDisplay((EGLNativeDisplayType)wlDisplay);
-                    EGLContext eglContext = eglGetCurrentContext();
-                    if (eglDisplay && eglContext)
-                    {
-                        graphicsBindings.getProcAddress = (PFNEGLGETPROCADDRESSPROC)eglGetProcAddress;
-                        graphicsBindings.display = eglDisplay;
-                        graphicsBindings.context = eglContext;
-                        eglGetConfigs(eglDisplay, &graphicsBindings.config, sizeof(graphicsBindings.config), nullptr);
-                    }
-                }
-            }
-
-            XrSessionCreateInfo createInfo{};
-            createInfo.type = XR_TYPE_SESSION_CREATE_INFO;
-            createInfo.next = &graphicsBindings;
-            createInfo.systemId = systemId;
-            res = CHECK_XRCMD(xrCreateSession(instance, &createInfo, &session));
-        }
-#if 0
-// Deprecated
-        else
-        {
-            XrGraphicsBindingOpenGLWaylandKHR graphicsBindings;
-            graphicsBindings.type = XR_TYPE_GRAPHICS_BINDING_OPENGL_WAYLAND_KHR;
-            graphicsBindings.next = nullptr;
-            SDL_SysWMinfo info;
-            SDL_VERSION(&info.version);
-
-            if (SDL_GetWindowWMInfo(mWindow, &info))
-            {
-                graphicsBindings.display = info.info.wl.display;
-            }
-
-            XrSessionCreateInfo createInfo{};
-            createInfo.type = XR_TYPE_SESSION_CREATE_INFO;
-            createInfo.next = &graphicsBindings;
-            createInfo.systemId = systemId;
-            res = CHECK_XRCMD(xrCreateSession(instance, &createInfo, &session));
-        }
-#endif
 #endif
         if (!XR_SUCCEEDED(res))
             initFailure(res, instance);
@@ -544,19 +394,14 @@ namespace XR
                        << std::dec;
                     ss << std::endl;
                 }
-                mRuntimeFormatsGL.push_back(static_cast<GLenum>(glFormat));
+                mRuntimeFormatsGL.push_back(glFormat);
                 mRuntimeFormatsDX.push_back(dxFormat);
             }
             Log(Debug::Verbose) << ss.str();
         }
         else
 #endif
-        {
-            // .insert() would have been simpler, but you can't cast with .insert() so we'd be stuck with compiler
-            // warnings
-            for (auto format : swapchainFormats)
-                mRuntimeFormatsGL.push_back(static_cast<GLenum>(format));
-        }
+            mRuntimeFormatsGL.insert(mRuntimeFormatsGL.end(), swapchainFormats.begin(), swapchainFormats.end());
 
         auto blacklistedFormats = getBlacklistedFormatsForSystem(systemName);
 
@@ -649,7 +494,6 @@ namespace XR
         return std::make_pair(static_cast<int64_t>(glFormat), glFormat);
     }
 
-#ifdef XR_USE_GRAPHICS_API_OPENGL
     std::vector<std::unique_ptr<VR::SwapchainImage>> enumerateSwapchainImagesOpenGL(XrSwapchain swapchain)
     {
 
@@ -671,35 +515,10 @@ namespace XR
 
         return images;
     }
-#endif // XR_USE_GRAPHICS_API_OPENGL
-
-#ifdef XR_USE_GRAPHICS_API_OPENGL_ES
-    std::vector<std::unique_ptr<VR::SwapchainImage>> enumerateSwapchainImagesOpenGLES(XrSwapchain swapchain)
-    {
-        XrSwapchainImageOpenGLESKHR xrimage{};
-        xrimage.type = XR_TYPE_SWAPCHAIN_IMAGE_OPENGL_ES_KHR;
-
-        uint32_t imageCount = 0;
-        std::vector<XrSwapchainImageOpenGLESKHR> xrimages;
-        CHECK_XRCMD(xrEnumerateSwapchainImages(swapchain, 0, &imageCount, nullptr));
-        xrimages.resize(imageCount, xrimage);
-        CHECK_XRCMD(xrEnumerateSwapchainImages(
-            swapchain, imageCount, &imageCount, reinterpret_cast<XrSwapchainImageBaseHeader*>(xrimages.data())));
-
-        std::vector<std::unique_ptr<VR::SwapchainImage>> images;
-        for (auto& image : xrimages)
-        {
-            // GLES swapchain images are plain GL texture names, same as desktop GL.
-            images.push_back(std::make_unique<VR::SwapchainImageGL>(image.image));
-        }
-
-        return images;
-    }
-#endif
 
 #ifdef _WIN32
     std::vector<std::unique_ptr<VR::SwapchainImage>> enumerateSwapchainImagesDirectX(XrSwapchain swapchain,
-        uint32_t textureTarget, uint64_t dxFormat, std::shared_ptr<VR::DirectXWGLInterop> dxInterop)
+        uint64_t textureTarget, uint64_t dxFormat, std::shared_ptr<VR::DirectXWGLInterop> dxInterop)
     {
         XrSwapchainImageD3D11KHR xrimage{};
         xrimage.type = XR_TYPE_SWAPCHAIN_IMAGE_D3D11_KHR;
@@ -725,25 +544,20 @@ namespace XR
     std::vector<std::unique_ptr<VR::SwapchainImage>> Platform::enumerateSwapchainImages(
         XrSwapchain swapchain, uint32_t textureTarget, uint64_t swapchainFormat)
     {
-#ifdef XR_USE_GRAPHICS_API_OPENGL
         if (XR::Extensions::instance().extensionEnabled(XR_KHR_OPENGL_ENABLE_EXTENSION_NAME))
         {
             return enumerateSwapchainImagesOpenGL(swapchain);
         }
-#endif
-#ifdef XR_USE_GRAPHICS_API_OPENGL_ES
-        if (XR::Extensions::instance().extensionEnabled(XR_KHR_OPENGL_ES_ENABLE_EXTENSION_NAME))
-        {
-            return enumerateSwapchainImagesOpenGLES(swapchain);
-        }
-#endif
 #ifdef _WIN32
-        if (XR::Extensions::instance().extensionEnabled(XR_KHR_D3D11_ENABLE_EXTENSION_NAME))
+        else if (XR::Extensions::instance().extensionEnabled(XR_KHR_D3D11_ENABLE_EXTENSION_NAME))
         {
             return enumerateSwapchainImagesDirectX(swapchain, textureTarget, swapchainFormat, mDxInterop);
         }
 #endif
-        // TODO: Vulkan swapchains?
-        throw std::logic_error("Not implemented");
+        else
+        {
+            // TODO: Vulkan swapchains?
+            throw std::logic_error("Not implemented");
+        }
     }
 }

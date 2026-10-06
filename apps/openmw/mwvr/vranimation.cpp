@@ -30,7 +30,6 @@
 #include <components/esm3/loadench.hpp>
 
 #include <components/misc/constants.hpp>
-#include <components/misc/mathutil.hpp>
 
 #include <components/vr/session.hpp>
 #include <components/vr/trackingmanager.hpp>
@@ -132,7 +131,7 @@ namespace MWVR
             traverse(node, nv);
             return;
         }
-        float PI_2 = osg::PI_2f;
+        float PI_2 = osg::PI_2;
         if (node->getName() == "Bip01 L Hand")
             PI_2 = -PI_2;
         float PI_4 = PI_2 / 2.f;
@@ -632,7 +631,7 @@ namespace MWVR
             {
                 auto path = head->getParentalNodePaths(root)[0];
                 auto m = osg::computeLocalToWorld(path);
-                mCharHeight = static_cast<float>(m.getTrans().z()) + head->computeBound().radius();
+                mCharHeight = m.getTrans().z() + head->computeBound().radius();
             }
             removeIndividualPart(ESM::PRT_Head);
         }
@@ -650,8 +649,8 @@ namespace MWVR
         float oldYaw = 0.f;
         float pitch = 0.f;
         float roll = 0.f;
-        Misc::getEulerAngles(mHeadPoseInLocalSpace.orientation, oldYaw, pitch, roll);
-        Misc::getEulerAngles(pose.orientation, newYaw, pitch, roll);
+        Stereo::getEulerAngles(mHeadPoseInLocalSpace.orientation, oldYaw, pitch, roll);
+        Stereo::getEulerAngles(pose.orientation, newYaw, pitch, roll);
         mHeadPoseInLocalSpace = pose;
         float characterYaw = mPtr.getRefData().getPosition().rot[2];
         float characterYawDiff = characterYaw - mCharacterYaw;

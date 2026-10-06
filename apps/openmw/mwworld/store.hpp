@@ -17,7 +17,6 @@
 #include <components/esm3/loadglob.hpp>
 #include <components/esm3/loadgmst.hpp>
 #include <components/esm3/loadland.hpp>
-#include <components/esm3/loadmgef.hpp>
 #include <components/esm3/loadpgrd.hpp>
 #include <components/esm3/loadskil.hpp>
 #include <components/esm4/loadachr.hpp>
@@ -27,9 +26,12 @@
 #include <components/misc/rng.hpp>
 #include <components/misc/strings/algorithm.hpp>
 
+#include "../mwdialogue/keywordsearch.hpp"
+
 namespace ESM
 {
     struct LandTexture;
+    struct MagicEffect;
     struct WeaponType;
     class ESMReader;
     class ESMWriter;
@@ -59,7 +61,7 @@ namespace MWWorld
     class DynamicStoreBase : public StoreBase
     {
     public:
-        virtual ~DynamicStoreBase() = default;
+        virtual ~DynamicStoreBase() {}
 
         virtual void setUp() {}
 
@@ -68,7 +70,7 @@ namespace MWWorld
         virtual void listIdentifier(std::vector<Id>& list) const {}
 
         virtual size_t getSize() const = 0;
-        virtual size_t getDynamicSize() const { return 0; }
+        virtual int getDynamicSize() const { return 0; }
         virtual RecordId load(ESM::ESMReader& esm) = 0;
 
         virtual bool eraseStatic(const Id& id) { return false; }
@@ -100,7 +102,7 @@ namespace MWWorld
 
         void load(ESM::ESMReader& esm);
 
-        size_t getSize() const;
+        int getSize() const;
         void setUp();
 
         const T* search(int index) const;
@@ -228,7 +230,7 @@ namespace MWWorld
         const T* at(size_t index) const { return mShared.at(index); }
 
         size_t getSize() const override;
-        size_t getDynamicSize() const override;
+        int getDynamicSize() const override;
 
         /// @note The record identifiers are listed in the order that the records were defined by the content files.
         void listIdentifier(std::vector<Id>& list) const override;
@@ -278,6 +280,8 @@ namespace MWWorld
 
         const ESM::GameSetting* find(const std::string_view id) const;
         const ESM::GameSetting* search(const std::string_view id) const;
+
+        void setUp() override;
     };
 
     template <>
@@ -356,10 +360,27 @@ namespace MWWorld
     template <>
     class Store<ESM::Cell> : public DynamicStore
     {
+        struct DynamicExtCmp
+        {
+            bool operator()(const std::pair<int, int>& left, const std::pair<int, int>& right) const
+            {
+                if (left.first == right.first && left.second == right.second)
+                    return false;
+
+                if (left.first == right.first)
+                    return left.second > right.second;
+
+                // Exterior cells are listed in descending, row-major order,
+                // this is a workaround for an ambiguous chargen_plank reference in the vanilla game.
+                // there is one at -22,16 and one at -2,-9, the latter should be used.
+                return left.first > right.first;
+            }
+        };
+
         typedef std::unordered_map<std::string, ESM::Cell*, Misc::StringUtils::CiHash, Misc::StringUtils::CiEqual>
             DynamicInt;
 
-        typedef std::map<std::pair<int, int>, ESM::Cell*> DynamicExt;
+        typedef std::map<std::pair<int, int>, ESM::Cell*, DynamicExtCmp> DynamicExt;
 
         std::unordered_map<ESM::RefId, ESM::Cell> mCells;
 
@@ -389,6 +410,7 @@ namespace MWWorld
         const ESM::Cell* find(int x, int y) const;
 
         void clearDynamic() override;
+        void setUp() override;
 
         RecordId load(ESM::ESMReader& esm) override;
 
@@ -396,6 +418,12 @@ namespace MWWorld
         iterator intEnd() const;
         iterator extBegin() const;
         iterator extEnd() const;
+
+        // Return the northernmost cell in the easternmost column.
+        const ESM::Cell* searchExtByName(std::string_view id) const;
+
+        // Return the northernmost cell in the easternmost column.
+        const ESM::Cell* searchExtByRegion(const ESM::RefId& id) const;
 
         size_t getSize() const override;
         size_t getExtSize() const;
@@ -449,6 +477,13 @@ namespace MWWorld
     };
 
     template <>
+    class Store<ESM::MagicEffect> : public IndexedStore<ESM::MagicEffect>
+    {
+    public:
+        Store();
+    };
+
+    template <>
     class Store<ESM::Attribute> : public TypedDynamicStore<ESM::Attribute>
     {
         using TypedDynamicStore<ESM::Attribute>::setUp;
@@ -457,15 +492,6 @@ namespace MWWorld
         Store() = default;
 
         void setUp(const MWWorld::Store<ESM::GameSetting>& settings);
-    };
-
-    template <>
-    class Store<ESM::MagicEffect> : public TypedDynamicStore<ESM::MagicEffect>
-    {
-        using TypedDynamicStore<ESM::MagicEffect>::setUp;
-
-    public:
-        Store() = default;
     };
 
     template <>
@@ -505,7 +531,8 @@ namespace MWWorld
         /// @warning ESM::Dialogue Store currently implements a sorted order for unknown reasons.
         std::vector<ESM::Dialogue*> mShared;
 
-        mutable bool mKeywordSearchModFlag{ true };
+        mutable bool mKeywordSearchModFlag;
+        mutable MWDialogue::KeywordSearch<int /*unused*/> mKeywordSearch;
 
     public:
         Store();
@@ -528,7 +555,7 @@ namespace MWWorld
 
         void listIdentifier(std::vector<ESM::RefId>& list) const override;
 
-        bool getKeywordSearchModFlag() const;
+        const MWDialogue::KeywordSearch<int>& getDialogIdKeywordSearch() const;
     };
 
     template <typename T>

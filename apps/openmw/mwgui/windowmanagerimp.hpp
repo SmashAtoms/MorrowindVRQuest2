@@ -143,7 +143,7 @@ namespace MWGui
         WindowManager(SDL_Window* window, osgViewer::Viewer* viewer, osg::Group* guiRoot,
             Resource::ResourceSystem* resourceSystem, SceneUtil::WorkQueue* workQueue,
             const std::filesystem::path& logpath, bool consoleOnlyScripts, Translation::Storage& translationDataStorage,
-            ToUTF8::FromType encoding, bool exportFonts, const std::string& versionDescription,
+            ToUTF8::FromType encoding, bool exportFonts, const std::string& versionDescription, bool useShaders,
             Files::ConfigurationManager& cfgMgr);
         virtual ~WindowManager();
 
@@ -345,7 +345,7 @@ namespace MWGui
 
         void write(ESM::ESMWriter& writer, Loading::Listener& progress) override;
         void readRecord(ESM::ESMReader& reader, uint32_t type) override;
-        size_t countSavedGameRecords() const override;
+        int countSavedGameRecords() const override;
 
         /// Does the current stack of GUI-windows permit saving?
         bool isSavingAllowed() const override;
@@ -408,7 +408,7 @@ namespace MWGui
         WindowBase* getActiveControllerWindow() override;
         int getControllerMenuHeight() override;
         void cycleActiveControllerWindow(bool next) override;
-        void setActiveControllerWindow(GuiMode mode, size_t activeIndex) override;
+        void setActiveControllerWindow(GuiMode mode, int activeIndex) override;
         bool getControllerTooltipVisible() const override { return mControllerTooltipVisible; }
         void setControllerTooltipVisible(bool visible) override;
         bool getControllerTooltipEnabled() const override { return mControllerTooltipEnabled; }
@@ -530,7 +530,7 @@ namespace MWGui
         // The currently active stack of GUI modes (top mode is the one we are in).
         std::vector<GuiMode> mGuiModes;
         // The active window for controller mode for each GUI mode.
-        std::map<GuiMode, size_t> mActiveControllerWindows;
+        std::map<GuiMode, int> mActiveControllerWindows;
         // Current tooltip visibility state (can be disabled by mouse movement)
         bool mControllerTooltipVisible = false;
         // User preference for tooltips (persists across mouse/controller switches)
@@ -632,8 +632,6 @@ namespace MWGui
 
         void setActiveMap(const MWWorld::Cell& cell);
         ///< set the indices of the map texture that should be used
-
-        void inventoryUpdated(const MWWorld::Ptr& ptr) const override;
 
         Files::ConfigurationManager& mCfgMgr;
 

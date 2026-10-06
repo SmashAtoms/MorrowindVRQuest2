@@ -322,8 +322,8 @@ namespace MWInput
         mMouseWheel += mouseWheelMove;
 
         const MyGUI::IntSize& viewSize = MyGUI::RenderManager::getInstance().getViewSize();
-        mGuiCursorX = std::clamp<float>(mGuiCursorX, 0.f, viewSize.width - 1.f);
-        mGuiCursorY = std::clamp<float>(mGuiCursorY, 0.f, viewSize.height - 1.f);
+        mGuiCursorX = std::clamp<float>(mGuiCursorX, 0.f, viewSize.width - 1);
+        mGuiCursorY = std::clamp<float>(mGuiCursorY, 0.f, viewSize.height - 1);
 
         // MyGUI::InputManager::getInstance().injectMouseMove(
         //     static_cast<int>(mGuiCursorX), static_cast<int>(mGuiCursorY), mMouseWheel);
@@ -337,9 +337,9 @@ namespace MWInput
 
     void MouseManager::warpMouse()
     {
-        //float guiUiScale = Settings::gui().mScalingFactor;
-        // mInputWrapper->warpMouse(
-        //     static_cast<int>(mGuiCursorX * guiUiScale), static_cast<int>(mGuiCursorY * guiUiScale));
+        float guiUiScale = Settings::gui().mScalingFactor;
+        mInputWrapper->warpMouse(
+            static_cast<int>(mGuiCursorX * guiUiScale), static_cast<int>(mGuiCursorY * guiUiScale));
     }
 
     // ## VR_PATCH BEGIN
@@ -362,8 +362,8 @@ namespace MWInput
 
     void MouseManager::warpMouseToWidget(MyGUI::Widget* widget)
     {
-        float widgetX = widget->getAbsoluteCoord().left + widget->getWidth() / 2.f;
-        float widgetY = widget->getAbsoluteCoord().top + widget->getHeight() / 4.f;
+        float widgetX = widget->getAbsoluteCoord().left + widget->getWidth() / 2;
+        float widgetY = widget->getAbsoluteCoord().top + widget->getHeight() / 4;
         if (std::abs(mGuiCursorX - widgetX) > 1 || std::abs(mGuiCursorY - widgetY) > 1)
         {
             mGuiCursorX = widgetX;

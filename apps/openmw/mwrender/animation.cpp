@@ -72,6 +72,21 @@
 
 namespace
 {
+    class MarkDrawablesVisitor : public osg::NodeVisitor
+    {
+    public:
+        MarkDrawablesVisitor(osg::Node::NodeMask mask)
+            : osg::NodeVisitor(TRAVERSE_ALL_CHILDREN)
+            , mMask(mask)
+        {
+        }
+
+        void apply(osg::Drawable& drawable) override { drawable.setNodeMask(mMask); }
+
+    private:
+        osg::Node::NodeMask mMask = 0;
+    };
+
     /// Removes all particle systems and related nodes in a subgraph.
     class RemoveParticlesVisitor : public osg::NodeVisitor
     {
@@ -493,7 +508,7 @@ namespace MWRender
         double duration = newTime - mStartingTime;
         mStartingTime = newTime;
 
-        mParams.mAnimTime->addTime(static_cast<float>(duration));
+        mParams.mAnimTime->addTime(duration);
         if (mParams.mAnimTime->getTime() >= mParams.mMaxControllerLength)
         {
             if (mParams.mLoop)
@@ -636,21 +651,21 @@ namespace MWRender
 
         path.replace(extensionStart, path.size() - extensionStart, "/");
 
-        constexpr VFS::Path::ExtensionView kf("kf");
         for (const VFS::Path::Normalized& name : mResourceSystem->getVFS()->getRecursiveDirectoryIterator(path))
-            if (name.extension() == kf)
+        {
+            if (Misc::getFileExtension(name) == "kf")
+            {
                 addSingleAnimSource(name, baseModel);
+            }
+        }
     }
 
     void Animation::addAnimSource(std::string_view model, const std::string& baseModel)
     {
-        constexpr VFS::Path::ExtensionView kf("kf");
-        constexpr VFS::Path::ExtensionView nif("nif");
-
         VFS::Path::Normalized kfname(model);
 
-        if (kfname.extension() == nif)
-            kfname.changeExtension(kf);
+        if (Misc::getFileExtension(kfname) == "nif")
+            kfname.changeExtension("kf");
 
         addSingleAnimSource(kfname, baseModel);
 
@@ -734,12 +749,10 @@ namespace MWRender
         // Get the blending rules
         if (useSmoothAnimationTransitions())
         {
-            constexpr VFS::Path::ExtensionView yaml("yaml");
-
             // Note, even if the actual config is .json - we should send a .yaml path to AnimBlendRulesManager, the
             // manager will check for .json if it will not find a specified .yaml file.
             VFS::Path::Normalized blendConfigPath(kfname);
-            blendConfigPath.changeExtension(yaml);
+            blendConfigPath.changeExtension("yaml");
 
             // globalBlendConfigPath is only used with actors! Objects have no default blending.
             constexpr VFS::Path::NormalizedView globalBlendConfigPath("animations/animation-config.yaml");
@@ -898,10 +911,7 @@ namespace MWRender
         while (stateiter != mStates.end())
         {
             if (stateiter->second.mPriority == priority && stateiter->first != groupname)
-            {
-                animationEnded(stateiter->second);
-                stateiter = mStates.erase(stateiter);
-            }
+                mStates.erase(stateiter++);
             else
                 ++stateiter;
         }
@@ -929,7 +939,6 @@ namespace MWRender
                 state.mAutoDisable = autodisable;
                 state.mGroupname = groupname;
                 state.mStartKey = start;
-                state.mStopKey = stop;
                 mStates[std::string{ groupname }] = state;
 
                 if (state.mPlaying)
@@ -1244,7 +1253,7 @@ namespace MWRender
         return false;
     }
 
-    bool Animation::getInfo(std::string_view groupname, float* complete, float* speedmult, uint32_t* loopcount) const
+    bool Animation::getInfo(std::string_view groupname, float* complete, float* speedmult, size_t* loopcount) const
     {
         AnimStateMap::const_iterator iter = mStates.find(groupname);
         if (iter == mStates.end())
@@ -1260,7 +1269,11 @@ namespace MWRender
 
         if (complete)
         {
-            *complete = iter->second.getCompletion();
+            if (iter->second.mStopTime > iter->second.mStartTime)
+                *complete = (iter->second.getTime() - iter->second.mStartTime)
+                    / (iter->second.mStopTime - iter->second.mStartTime);
+            else
+                *complete = (iter->second.mPlaying ? 0.0f : 1.0f);
         }
         if (speedmult)
             *speedmult = iter->second.mSpeedMult;
@@ -1292,10 +1305,7 @@ namespace MWRender
     {
         AnimStateMap::iterator iter = mStates.find(groupname);
         if (iter != mStates.end())
-        {
-            animationEnded(iter->second);
             mStates.erase(iter);
-        }
         resetActiveGroups();
     }
 
@@ -1434,8 +1444,7 @@ namespace MWRender
 
             if (!state.mPlaying && state.mAutoDisable)
             {
-                animationEnded(stateiter->second);
-                stateiter = mStates.erase(stateiter);
+                mStates.erase(stateiter++);
 
                 resetActiveGroups();
             }
@@ -1799,6 +1808,9 @@ namespace MWRender
 
         node->setNodeMask(Mask_Effect);
 
+        MarkDrawablesVisitor markVisitor(Mask_Effect);
+        node->accept(markVisitor);
+
         params.mMaxControllerLength = findMaxLengthVisitor.getMaxLength();
         params.mLoop = loop;
         params.mEffectId = effectId;
@@ -1813,7 +1825,7 @@ namespace MWRender
         // Notify that this animation has attached magic effects
         mHasMagicEffects = true;
 
-        overrideFirstRootTexture(VFS::Path::toNormalized(texture), mResourceSystem, *node);
+        overrideFirstRootTexture(texture, mResourceSystem, *node);
     }
 
     void Animation::removeEffect(std::string_view effectId)
@@ -2033,12 +2045,6 @@ namespace MWRender
             mInsert->removeChild(mObjectRoot);
     }
 
-    void Animation::animationEnded(AnimState& state) const
-    {
-        MWBase::Environment::get().getLuaManager()->animationEnded(
-            mPtr, state.mGroupname, state.getTime(), state.getCompletion(), state.mStartKey, state.mStopKey);
-    }
-
     MWWorld::MovementDirectionFlags Animation::getSupportedMovementDirections(
         std::span<const std::string_view> prefixes) const
     {
@@ -2181,13 +2187,5 @@ namespace MWRender
                                     << ") parents";
             mNode->getParent(0)->removeChild(mNode);
         }
-    }
-
-    float Animation::AnimState::getCompletion() const
-    {
-        if (mStopTime > mStartTime)
-            return (getTime() - mStartTime) / (mStopTime - mStartTime);
-        else
-            return mPlaying ? 0.0f : 1.0f;
     }
 }

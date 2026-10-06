@@ -3,7 +3,6 @@
 
 #include <filesystem>
 #include <map>
-#include <utility>
 
 #include "../mwbase/statemanager.hpp"
 
@@ -16,7 +15,7 @@ namespace MWState
         bool mQuitRequest;
         bool mAskLoadRecent;
         bool mNewGameRequest = false;
-        std::optional<std::pair<const Character*, std::filesystem::path>> mLoadRequest;
+        std::optional<std::filesystem::path> mLoadRequest;
         State mState;
         CharacterManager mCharacterManager;
         double mTimePlayed;
@@ -43,10 +42,7 @@ namespace MWState
         void askLoadRecent() override;
 
         void requestNewGame() override { mNewGameRequest = true; }
-        void requestLoad(const Character* character, const std::filesystem::path& filepath) override
-        {
-            mLoadRequest.emplace(character, filepath);
-        }
+        void requestLoad(const std::filesystem::path& filepath) override { mLoadRequest = filepath; }
 
         State getState() const override;
 

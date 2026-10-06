@@ -37,7 +37,7 @@ namespace MWGui
 
     ItemModel::ModelIndex InventoryItemModel::getIndex(const ItemStack& item)
     {
-        ModelIndex i = 0;
+        size_t i = 0;
         for (ItemStack& itemStack : mItems)
         {
             if (itemStack == item)
@@ -51,7 +51,7 @@ namespace MWGui
     {
         if (item.mBase.getContainerStore() == &mActor.getClass().getContainerStore(mActor))
             throw std::runtime_error("Item to add needs to be from a different container!");
-        return *mActor.getClass().getContainerStore(mActor).add(item.mBase, static_cast<int>(count), allowAutoEquip);
+        return *mActor.getClass().getContainerStore(mActor).add(item.mBase, count, allowAutoEquip);
     }
 
     MWWorld::Ptr InventoryItemModel::copyItem(const ItemStack& item, size_t count, bool allowAutoEquip)
@@ -59,9 +59,8 @@ namespace MWGui
         if (item.mBase.getContainerStore() == &mActor.getClass().getContainerStore(mActor))
             throw std::runtime_error("Item to copy needs to be from a different container!");
 
-        MWWorld::ManualRef newRef(*MWBase::Environment::get().getESMStore(), item.mBase, static_cast<int>(count));
-        return *mActor.getClass().getContainerStore(mActor).add(
-            newRef.getPtr(), static_cast<int>(count), allowAutoEquip);
+        MWWorld::ManualRef newRef(*MWBase::Environment::get().getESMStore(), item.mBase, count);
+        return *mActor.getClass().getContainerStore(mActor).add(newRef.getPtr(), count, allowAutoEquip);
     }
 
     void InventoryItemModel::removeItem(const ItemStack& item, size_t count)
@@ -71,12 +70,12 @@ namespace MWGui
         if (mActor.getClass().hasInventoryStore(mActor))
         {
             MWWorld::InventoryStore& store = mActor.getClass().getInventoryStore(mActor);
-            removed = store.remove(item.mBase, static_cast<int>(count), true);
+            removed = store.remove(item.mBase, count, true);
         }
         else
         {
             MWWorld::ContainerStore& store = mActor.getClass().getContainerStore(mActor);
-            removed = store.remove(item.mBase, static_cast<int>(count));
+            removed = store.remove(item.mBase, count);
         }
 
         std::stringstream error;

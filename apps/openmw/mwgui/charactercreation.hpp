@@ -7,7 +7,6 @@
 #include <memory>
 #include <vector>
 
-#include "mode.hpp"
 #include "statswatcher.hpp"
 
 namespace osg
@@ -43,7 +42,7 @@ namespace MWGui
         virtual ~CharacterCreation();
 
         // Show a dialog
-        void spawnDialog(const GuiMode id);
+        void spawnDialog(const char id);
 
         void setAttribute(ESM::RefId id, const MWMechanics::AttributeValue& value) override;
         void setValue(std::string_view id, const MWMechanics::DynamicStat<float>& value) override;

@@ -12,7 +12,8 @@
 
 #include <set>
 
-#include <tinyxml.h>
+#include <extern/oics/tinyxml.h>
+
 
 namespace
 {
@@ -38,6 +39,9 @@ namespace
     using Interactions = std::vector<Interaction>;
     using Controllers = std::map<std::string, Interactions>;
     using InteractionProfiles = std::vector<std::pair<std::vector<Controller>, Controllers>>;
+
+    InteractionProfiles interactionProfiles;
+
 }
 
 namespace MWVR
@@ -80,14 +84,14 @@ namespace MWVR
     void OpenXRInput::createLuaActions() 
     {
         // Use the list of known interactionProfiles to populate a list of actions
-        auto allKnownInteractionProfiles = XR::getAllKnownInteractionProfiles();
+        auto interactionProfiles = XR::getAllKnownInteractionProfiles();
         std::set<std::string> axisActions;
         std::set<std::string> boolActions;
         std::set<std::string> floatActions;
         std::set<std::string> poseActions;
         std::set<std::string> hapticsActions;
 
-        for (auto& ip : allKnownInteractionProfiles)
+        for (auto& ip : interactionProfiles)
         {
             for (auto& ctrl : ip.second)
             {
@@ -228,7 +232,7 @@ namespace MWVR
         // Attach
         XrSessionActionSetsAttachInfo attachInfo{};
         attachInfo.type = XR_TYPE_SESSION_ACTION_SETS_ATTACH_INFO;
-        attachInfo.countActionSets = static_cast<uint32_t>(actionSets.size());
+        attachInfo.countActionSets = actionSets.size();
         attachInfo.actionSets = actionSets.data();
         CHECK_XRCMD(xrAttachSessionActionSets(XR::Session::instance().xrSession(), &attachInfo));
     }

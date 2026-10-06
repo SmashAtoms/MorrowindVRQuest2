@@ -26,13 +26,13 @@ namespace
             script.mRunning = false;
             if (!ptr.isEmpty())
             {
-                if (MWBase::Environment::get().getWorld()->getPlayerPtr() == ptr)
-                    script.mTargetId = ptr.getCellRef().getRefId();
-                else if (ptr.getCellRef().getRefNum().isSet())
+                if (ptr.getCellRef().hasContentFile())
                 {
                     script.mTargetId = ptr.getCellRef().getRefId();
                     script.mTargetRef = ptr.getCellRef().getRefNum();
                 }
+                else if (MWBase::Environment::get().getWorld()->getPlayerPtr() == ptr)
+                    script.mTargetId = ptr.getCellRef().getRefId();
             }
             return script;
         }
@@ -60,10 +60,10 @@ namespace
 
         MWWorld::Ptr operator()(const std::pair<ESM::RefNum, ESM::RefId>& pair) const
         {
-            if (pair.first.isSet())
-                return MWBase::Environment::get().getWorldModel()->getPtr(pair.first);
-            else if (pair.second.empty())
+            if (pair.second.empty())
                 return MWWorld::Ptr();
+            else if (pair.first.hasContentFile())
+                return MWBase::Environment::get().getWorldModel()->getPtr(pair.first);
             return MWBase::Environment::get().getWorld()->searchPtr(pair.second, false);
         }
     };
@@ -217,7 +217,7 @@ namespace MWScript
         }
     }
 
-    size_t GlobalScripts::countSavedGameRecords() const
+    int GlobalScripts::countSavedGameRecords() const
     {
         return mScripts.size();
     }
@@ -256,7 +256,7 @@ namespace MWScript
                     try
                     {
                         auto desc = std::make_shared<GlobalScriptDesc>();
-                        if (!script.mTargetId.empty() || script.mTargetRef.isSet())
+                        if (!script.mTargetId.empty())
                         {
                             desc->mTarget = std::make_pair(script.mTargetRef, script.mTargetId);
                         }

@@ -9,11 +9,8 @@
 #include <components/esm/refid.hpp>
 #include <components/esm/vector3.hpp>
 
-#include "refnum.hpp"
-
 namespace ESM
 {
-    class ActorIdConverter;
     class ESMReader;
     class ESMWriter;
 
@@ -36,7 +33,7 @@ namespace ESM
 
         struct AiPackage
         {
-            virtual ~AiPackage() = default;
+            virtual ~AiPackage() {}
         };
 
         struct AiWanderData
@@ -92,7 +89,7 @@ namespace ESM
         {
             AiEscortData mData;
 
-            ESM::RefNum mTargetActor;
+            int32_t mTargetActorId;
             ESM::RefId mTargetId;
             std::string mCellId;
             float mRemainingDuration;
@@ -106,7 +103,7 @@ namespace ESM
         {
             AiEscortData mData;
 
-            ESM::RefNum mTargetActor;
+            int32_t mTargetActorId;
             ESM::RefId mTargetId;
             std::string mCellId;
             float mRemainingDuration;
@@ -132,7 +129,7 @@ namespace ESM
 
         struct AiCombat : AiPackage
         {
-            ESM::RefNum mTargetActor;
+            int32_t mTargetActorId;
 
             void load(ESMReader& esm);
             void save(ESMWriter& esm) const;
@@ -140,7 +137,7 @@ namespace ESM
 
         struct AiPursue : AiPackage
         {
-            ESM::RefNum mTargetActor;
+            int32_t mTargetActorId;
 
             void load(ESMReader& esm);
             void save(ESMWriter& esm) const;
@@ -155,16 +152,17 @@ namespace ESM
 
         struct AiSequence
         {
-            std::vector<AiPackageContainer> mPackages;
-            ActorIdConverter* mActorIdConverter = nullptr;
-            int32_t mLastAiPackage = -1;
+            AiSequence() { mLastAiPackage = -1; }
 
-            AiSequence() {}
-            AiSequence(const AiSequence&) = delete;
-            AiSequence& operator=(const AiSequence&) = delete;
+            std::vector<AiPackageContainer> mPackages;
+            int32_t mLastAiPackage;
 
             void load(ESMReader& esm);
             void save(ESMWriter& esm) const;
+
+        private:
+            AiSequence(const AiSequence&);
+            AiSequence& operator=(const AiSequence&);
         };
 
     }

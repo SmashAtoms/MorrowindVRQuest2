@@ -48,7 +48,7 @@ add_openmw_dir (mwgui
     )
 
 add_openmw_dir (mwdialogue
-    dialoguemanagerimp journalimp journalentry quest topic filter selectwrapper keywordsearch scripttest
+    dialoguemanagerimp journalimp journalentry quest topic filter selectwrapper hypertextparser keywordsearch scripttest
     )
 
 add_openmw_dir (mwscript
@@ -59,7 +59,7 @@ add_openmw_dir (mwscript
     )
 
 add_openmw_dir (mwlua
-    luamanagerimp object objectlists userdataserializer luaevents engineevents objectvariant loadscripts contentbindings
+    luamanagerimp object objectlists userdataserializer luaevents engineevents objectvariant
     context menuscripts globalscripts localscripts playerscripts luabindings objectbindings cellbindings coremwscriptbindings
     mwscriptbindings camerabindings vfsbindings uibindings soundbindings inputbindings nearbybindings dialoguebindings
     postprocessingbindings stats recordstore debugbindings corebindings worldbindings worker landbindings magicbindings factionbindings
@@ -68,7 +68,7 @@ add_openmw_dir (mwlua
     types/types types/door types/item types/actor types/container types/lockable types/weapon types/npc
     types/creature types/player types/activator types/book types/lockpick types/probe types/apparatus
     types/potion types/ingredient types/misc types/repair types/armor types/light types/static
-    types/clothing types/levelledlist types/terminal magictypebindings
+    types/clothing types/levelledlist types/terminal
     )
 
 add_openmw_dir (mwsound
@@ -131,22 +131,6 @@ add_library(openmw-lib STATIC
     ${OPENMW_SOURCES}
 )
 
-if (MSVC)
-    # these TUs take a lot of memory for codegen
-    # in CI, they often go over the 8GB memory limit if another cl.exe is running at the same time
-    # this option (make sure you're not looking at the docs for the identically-named linker option) stops four codegen threads being spun off
-    # it hurts build time ~33% to enable this unnecessarily, though, so target it to the hungriest boys
-    set_source_files_properties(
-        mwlua/dialoguebindings.cpp
-        mwlua/magicbindings.cpp
-        mwlua/objectbindings
-        mwlua/stats.cpp
-        mwworld/esmstore.cpp
-        PROPERTIES
-        COMPILE_OPTIONS /cgthreads1
-    )
-endif()
-
 if(BUILD_OPENMW)
     if (ANDROID)
         add_library(openmw SHARED
@@ -163,12 +147,6 @@ if(BUILD_OPENMW)
 
     target_link_libraries(openmw openmw-lib)
 
-    # On Android there is no separate openmw_vr executable; the VR code paths are
-    # compiled directly into libopenmw.so which the APK loads.
-    if (ANDROID AND BUILD_OPENMW_VR)
-        target_compile_definitions(openmw PRIVATE OPENMW_VR=1)
-    endif()
-
     # Workaround necessary to ensure osgAnimation::MatrixLinearSampler dynamic casts work under Clang
     # NOTE: it's unclear whether the broken behavior is spec-compliant
     if (CMAKE_CXX_COMPILER_ID STREQUAL Clang)
@@ -176,7 +154,7 @@ if(BUILD_OPENMW)
     endif()
 endif()
 
-if(BUILD_OPENMW_VR AND NOT ANDROID)
+if(BUILD_OPENMW_VR)
     openmw_add_executable(openmw_vr
         ${APPLE_BUNDLE_RESOURCES}
         ${OPENMW_RESOURCES}
@@ -187,7 +165,7 @@ if(BUILD_OPENMW_VR AND NOT ANDROID)
     #if (WIN32)
     #    target_compile_options(openmw_vr PUBLIC XR_USE_GRAPHICS_API_OPENGL XR_USE_GRAPHICS_API_D3D11 XR_USE_PLATFORM_WIN32)
     #elseif(UNIX)
-    #    target_compile_options(openmw_vr PUBLIC XR_USE_GRAPHICS_API_OPENGL XR_USE_PLATFORM_XLIB XR_USE_PLATFORM_WAYLAND)
+    #    target_compile_options(openmw_vr PUBLIC XR_USE_GRAPHICS_API_OPENGL XR_USE_PLATFORM_XLIB)
     #endif()
 endif()
 
@@ -215,8 +193,8 @@ target_link_libraries(openmw-lib
     ${MyGUI_LIBRARIES}
     SDL2::SDL2
     ${RecastNavigation_LIBRARIES}
-    osg-ffmpeg-videoplayer
-    oics
+    "osg-ffmpeg-videoplayer"
+    "oics"
     components
 )
 
@@ -245,6 +223,8 @@ if (MSVC AND PRECOMPILE_HEADERS_WITH_MSVC)
         <vector>
     )
 endif()
+
+add_definitions(-DMYGUI_DONT_USE_OBSOLETE=ON)
 
 if (ANDROID)
     target_link_libraries(openmw-lib EGL android log z)
@@ -322,7 +302,7 @@ if(BUILD_OPENMW)
             COMMAND cp "${OpenMW_BINARY_DIR}/resources/version" "${BUNDLE_RESOURCES_DIR}/resources")
     endif(APPLE)
 endif()
-if(BUILD_OPENMW_VR AND NOT ANDROID)
+if(BUILD_OPENMW_VR)
     target_link_libraries(openmw_vr ${OPENMW_LINK_TARGETS})
     if(OPENMW_LINK_OPTIONS)
         target_link_options(openmw_vr ${OPENMW_LINK_OPTIONS})
@@ -335,11 +315,9 @@ if(BUILD_OPENMW_VR AND NOT ANDROID)
             POST_BUILD
             COMMAND cp "${OpenMW_BINARY_DIR}/resources/version" "${BUNDLE_RESOURCES_DIR}/resources")
     endif(APPLE)
-endif()
-# The interaction-profile bindings are needed at runtime on every VR platform.
-if(BUILD_OPENMW_VR)
     configure_resource_file(${OpenMW_SOURCE_DIR}/files/openxrinteractionprofiles.xml
         "${OpenMW_BINARY_DIR}" "openxrinteractionprofiles.xml")
+
 endif()
 ### /VR_PATCH
 

@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <type_traits>
 
-#include <components/esm3/actoridconverter.hpp>
 #include <components/esm3/creaturestats.hpp>
 #include <components/esm3/esmreader.hpp>
 #include <components/esm3/esmwriter.hpp>
@@ -18,6 +17,8 @@
 
 namespace MWMechanics
 {
+    int CreatureStats::sActorId = 0;
+
     CreatureStats::CreatureStats()
     {
         for (const ESM::Attribute& attribute : MWBase::Environment::get().getESMStore()->get<ESM::Attribute>())
@@ -364,14 +365,14 @@ namespace MWMechanics
         return mLastHitAttemptObject;
     }
 
-    void CreatureStats::setHitAttemptActor(ESM::RefNum actor)
+    void CreatureStats::setHitAttemptActorId(int actorId)
     {
-        mHitAttemptActor = actor;
+        mHitAttemptActorId = actorId;
     }
 
-    ESM::RefNum CreatureStats::getHitAttemptActor() const
+    int CreatureStats::getHitAttemptActorId() const
     {
-        return mHitAttemptActor;
+        return mHitAttemptActorId;
     }
 
     void CreatureStats::addToFallHeight(float height)
@@ -406,8 +407,8 @@ namespace MWMechanics
         else
             base = world->getStore().get<ESM::GameSetting>().find("fNPCbaseMagickaMult")->mValue.getFloat();
 
-        float magickaFactor = base
-            + mMagicEffects.getOrDefault(EffectKey(ESM::MagicEffect::FortifyMaximumMagicka)).getMagnitude() * 0.1f;
+        double magickaFactor = base
+            + mMagicEffects.getOrDefault(EffectKey(ESM::MagicEffect::FortifyMaximumMagicka)).getMagnitude() * 0.1;
 
         DynamicStat<float> magicka = getMagicka();
         float currentToBaseRatio = magicka.getBase() > 0 ? magicka.getCurrent() / magicka.getBase() : 0;
@@ -506,7 +507,7 @@ namespace MWMechanics
     void CreatureStats::writeState(ESM::CreatureStats& state) const
     {
         for (size_t i = 0; i < state.mAttributes.size(); ++i)
-            getAttribute(ESM::Attribute::indexToRefId(static_cast<int>(i))).writeState(state.mAttributes[i]);
+            getAttribute(ESM::Attribute::indexToRefId(i)).writeState(state.mAttributes[i]);
 
         for (size_t i = 0; i < state.mDynamic.size(); ++i)
             mDynamic[i].writeState(state.mDynamic[i]);
@@ -538,6 +539,7 @@ namespace MWMechanics
         state.mRecalcDynamicStats = false;
         state.mDrawState = static_cast<int>(mDrawState);
         state.mLevel = mLevel;
+        state.mActorId = mActorId;
         state.mDeathAnimation = mDeathAnimation;
         state.mTimeOfDeath = mTimeOfDeath.toEsm();
         // state.mHitAttemptActorId = mHitAttemptActorId;
@@ -548,6 +550,7 @@ namespace MWMechanics
         mMagicEffects.writeState(state.mMagicEffects);
 
         state.mSummonedCreatures = mSummonedCreatures;
+        state.mSummonGraveyard = mSummonGraveyard;
 
         state.mHasAiSettings = true;
         for (size_t i = 0; i < state.mAiSettings.size(); ++i)
@@ -561,7 +564,7 @@ namespace MWMechanics
         if (!state.mMissingACDT)
         {
             for (size_t i = 0; i < state.mAttributes.size(); ++i)
-                mAttributes[ESM::Attribute::indexToRefId(static_cast<int>(i))].readState(state.mAttributes[i]);
+                mAttributes[ESM::Attribute::indexToRefId(i)].readState(state.mAttributes[i]);
 
             for (size_t i = 0; i < state.mDynamic.size(); ++i)
                 mDynamic[i].readState(state.mDynamic[i]);
@@ -590,9 +593,10 @@ namespace MWMechanics
         mLastHitAttemptObject = state.mLastHitAttemptObject;
         mDrawState = DrawState(state.mDrawState);
         mLevel = state.mLevel;
+        mActorId = state.mActorId;
         mDeathAnimation = state.mDeathAnimation;
         mTimeOfDeath = MWWorld::TimeStamp(state.mTimeOfDeath);
-        // mHitAttemptActor = state.mHitAttemptActor;
+        // mHitAttemptActorId = state.mHitAttemptActorId;
 
         mSpells.readState(state.mSpells, this);
         mActiveSpells.readState(state.mActiveSpells);
@@ -600,19 +604,13 @@ namespace MWMechanics
         mMagicEffects.readState(state.mMagicEffects);
 
         mSummonedCreatures = state.mSummonedCreatures;
+        mSummonGraveyard = state.mSummonGraveyard;
 
         if (state.mHasAiSettings)
             for (size_t i = 0; i < state.mAiSettings.size(); ++i)
                 mAiSettings[i].readState(state.mAiSettings[i]);
         if (state.mRecalcDynamicStats)
             recalculateMagicka();
-        if (state.mAiSequence.mActorIdConverter)
-        {
-            for (auto& [_, refNum] : mSummonedCreatures)
-                state.mAiSequence.mActorIdConverter->convert(refNum, refNum.mIndex);
-            auto& graveyard = state.mAiSequence.mActorIdConverter->mGraveyard;
-            graveyard.insert(graveyard.end(), state.mSummonGraveyard.begin(), state.mSummonGraveyard.end());
-        }
     }
 
     void CreatureStats::setLastRestockTime(MWWorld::TimeStamp tradeTime)
@@ -634,6 +632,36 @@ namespace MWMechanics
         return mGoldPool;
     }
 
+    int CreatureStats::getActorId()
+    {
+        if (mActorId == -1)
+            mActorId = sActorId++;
+
+        return mActorId;
+    }
+
+    bool CreatureStats::matchesActorId(int id) const
+    {
+        return mActorId != -1 && id == mActorId;
+    }
+
+    void CreatureStats::cleanup()
+    {
+        sActorId = 0;
+    }
+
+    void CreatureStats::writeActorIdCounter(ESM::ESMWriter& esm)
+    {
+        esm.startRecord(ESM::REC_ACTC);
+        esm.writeHNT("COUN", sActorId);
+        esm.endRecord(ESM::REC_ACTC);
+    }
+
+    void CreatureStats::readActorIdCounter(ESM::ESMReader& esm)
+    {
+        esm.getHNT(sActorId, "COUN");
+    }
+
     signed char CreatureStats::getDeathAnimation() const
     {
         return mDeathAnimation;
@@ -649,9 +677,14 @@ namespace MWMechanics
         return mTimeOfDeath;
     }
 
-    std::multimap<ESM::RefId, ESM::RefNum>& CreatureStats::getSummonedCreatureMap()
+    std::multimap<int, int>& CreatureStats::getSummonedCreatureMap()
     {
         return mSummonedCreatures;
+    }
+
+    std::vector<int>& CreatureStats::getSummonedCreatureGraveyard()
+    {
+        return mSummonGraveyard;
     }
 
     void CreatureStats::updateAwareness(float duration)

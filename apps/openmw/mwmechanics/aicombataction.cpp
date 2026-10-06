@@ -51,8 +51,11 @@ namespace MWMechanics
     {
         actor.getClass().getCreatureStats(actor).getSpells().setSelectedSpell(mSpellId);
         actor.getClass().getCreatureStats(actor).setDrawState(DrawState::Spell);
-        MWWorld::ContainerStore& inv = actor.getClass().getContainerStore(actor);
-        inv.setSelectedEnchantItem(inv.end());
+        if (actor.getClass().hasInventoryStore(actor))
+        {
+            MWWorld::InventoryStore& inv = actor.getClass().getInventoryStore(actor);
+            inv.setSelectedEnchantItem(inv.end());
+        }
 
         const ESM::Spell* spell = MWBase::Environment::get().getESMStore()->get<ESM::Spell>().find(mSpellId);
         MWBase::Environment::get().getWorld()->preloadEffects(&spell->mEffects);
@@ -70,7 +73,7 @@ namespace MWMechanics
     void ActionEnchantedItem::prepare(const MWWorld::Ptr& actor)
     {
         actor.getClass().getCreatureStats(actor).getSpells().setSelectedSpell(ESM::RefId());
-        actor.getClass().getContainerStore(actor).setSelectedEnchantItem(mItem);
+        actor.getClass().getInventoryStore(actor).setSelectedEnchantItem(mItem);
         actor.getClass().getCreatureStats(actor).setDrawState(DrawState::Spell);
     }
 
@@ -187,7 +190,8 @@ namespace MWMechanics
                     antiFleeRating = std::numeric_limits<float>::max();
                 }
             }
-            else if (!it->getClass().getEnchantment(*it).empty())
+            // TODO remove inventory store check, creatures should be able to use enchanted items they cannot equip
+            else if (hasInventoryStore && !it->getClass().getEnchantment(*it).empty())
             {
                 float rating = rateMagicItem(*it, actor, enemy);
                 if (rating > bestActionRating)
@@ -333,11 +337,9 @@ namespace MWMechanics
             item = invStore.getSlot(MWWorld::InventoryStore::Slot_Ammunition);
             if (item != invStore.end() && item.getType() == MWWorld::ContainerStore::Type_Weapon)
                 activeAmmo = *item;
-        }
-        {
-            MWWorld::ContainerStore& store = actor.getClass().getContainerStore(actor);
-            if (store.getSelectedEnchantItem() != store.end())
-                selectedEnchItem = *store.getSelectedEnchantItem();
+
+            if (invStore.getSelectedEnchantItem() != invStore.end())
+                selectedEnchItem = *invStore.getSelectedEnchantItem();
         }
 
         float dist = 1.0f;
@@ -512,7 +514,7 @@ namespace MWMechanics
 
         const int flee = stats.getAiSetting(AiSetting::Flee).getModified();
         if (flee >= 100)
-            return static_cast<float>(flee);
+            return flee;
 
         static const float fAIFleeHealthMult = gmst.find("fAIFleeHealthMult")->mValue.getFloat();
         static const float fAIFleeFleeMult = gmst.find("fAIFleeFleeMult")->mValue.getFloat();
@@ -527,7 +529,7 @@ namespace MWMechanics
             if (enemy.getClass().getNpcStats(enemy).isWerewolf() && stats.getLevel() < iWereWolfLevelToAttack)
             {
                 static const int iWereWolfFleeMod = gmst.find("iWereWolfFleeMod")->mValue.getInteger();
-                rating = static_cast<float>(iWereWolfFleeMod);
+                rating = iWereWolfFleeMod;
             }
         }
 

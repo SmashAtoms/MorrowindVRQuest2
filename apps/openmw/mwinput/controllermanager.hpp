@@ -68,8 +68,6 @@ namespace MWInput
         bool mGuiCursorEnabled;
         bool mJoystickLastUsed;
         bool mGamepadMousePressed;
-        bool mLeftTriggerGuiPressed;
-        bool mRightTriggerGuiPressed;
 //## VR_PATCH BEGIN
     public:
         void setThumbstickAutoRun(bool enabled);

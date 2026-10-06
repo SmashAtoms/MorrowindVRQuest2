@@ -67,9 +67,9 @@ namespace MWRender
         }
         void drawImplementation(osg::RenderInfo& renderInfo, const osg::Drawable* /*drawable*/) const override
         {
-            int screenW = static_cast<int>(renderInfo.getCurrentCamera()->getViewport()->width());
-            int screenH = static_cast<int>(renderInfo.getCurrentCamera()->getViewport()->height());
-            double imageaspect = double(mWidth) / double(mHeight);
+            int screenW = renderInfo.getCurrentCamera()->getViewport()->width();
+            int screenH = renderInfo.getCurrentCamera()->getViewport()->height();
+            double imageaspect = (double)mWidth / (double)mHeight;
             int leftPadding = std::max(0, static_cast<int>(screenW - screenH * imageaspect) / 2);
             int topPadding = std::max(0, static_cast<int>(screenH - screenW / imageaspect) / 2);
             int width = screenW - leftPadding * 2;
@@ -82,11 +82,9 @@ namespace MWRender
                     = dynamic_cast<PostProcessor*>(renderInfo.getCurrentCamera()->getUserData());
                 size_t frameId = renderInfo.getState()->getFrameStamp()->getFrameNumber() % 2;
 
-                if (postProcessor
-                    && postProcessor->getFbo(PostProcessor::FBO_Primary, static_cast<unsigned int>(frameId)))
+                if (postProcessor && postProcessor->getFbo(PostProcessor::FBO_Primary, frameId))
                 {
-                    osg::FrameBufferObject* fbo
-                        = postProcessor->getFbo(PostProcessor::FBO_Primary, static_cast<unsigned int>(frameId));
+                    osg::FrameBufferObject* fbo = postProcessor->getFbo(PostProcessor::FBO_Primary, frameId);
                     auto tex = fbo->getAttachment(osg::FrameBufferObject::BufferComponent::COLOR_BUFFER0).getTexture();
                     auto tex2dArray = dynamic_cast<const osg::Texture2DArray*>(tex);
                     if (tex2dArray)

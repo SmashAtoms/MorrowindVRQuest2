@@ -35,7 +35,7 @@ namespace XR
         return *sInstance;
     }
 
-    Instance::Instance(osg::GraphicsContext* gc, SDL_Window* window)
+    Instance::Instance(osg::GraphicsContext* gc)
     {
         if (!sInstance)
             sInstance = this;
@@ -46,13 +46,10 @@ namespace XR
         mConfigViews[0].type = XR_TYPE_VIEW_CONFIGURATION_VIEW;
         mConfigViews[1].type = XR_TYPE_VIEW_CONFIGURATION_VIEW;
 
-        // Must run before any other OpenXR call on Android (no-op elsewhere).
-        initAndroidLoader();
-
         mExtensions = std::make_unique<Extensions>();
         for (auto& extension : getAllKnownInteractionProfileExtensions())
             mExtensions->requestExtension(extension);
-        mPlatform = std::make_unique<Platform>(gc, window);
+        mPlatform = std::make_unique<Platform>(gc);
         mPlatform->selectGraphicsAPIExtension();
         mXrInstance = mExtensions->createXrInstance("openmw_vr");
         Debugging::setName(mXrInstance, "OpenMW XR Instance");

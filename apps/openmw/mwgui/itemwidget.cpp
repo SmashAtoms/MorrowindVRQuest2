@@ -141,17 +141,16 @@ namespace MWGui
 
     void ItemWidget::setIcon(const MWWorld::Ptr& ptr)
     {
-        constexpr VFS::Path::NormalizedView defaultIcon("default icon.tga");
         std::string_view icon = ptr.getClass().getInventoryIcon(ptr);
         if (icon.empty())
-            icon = defaultIcon.value();
+            icon = "default icon.tga";
         const VFS::Manager* const vfs = MWBase::Environment::get().getResourceSystem()->getVFS();
-        std::string invIcon = Misc::ResourceHelpers::correctIconPath(VFS::Path::toNormalized(icon), *vfs);
+        std::string invIcon = Misc::ResourceHelpers::correctIconPath(icon, vfs);
         if (!vfs->exists(invIcon))
         {
-            Log(Debug::Error) << "Failed to open image: '" << invIcon << "' not found, falling back to '"
-                              << defaultIcon.value() << "'";
-            invIcon = Misc::ResourceHelpers::correctIconPath(defaultIcon, *vfs);
+            Log(Debug::Error) << "Failed to open image: '" << invIcon
+                              << "' not found, falling back to 'default-icon.tga'";
+            invIcon = Misc::ResourceHelpers::correctIconPath("default icon.tga", vfs);
         }
         setIcon(invIcon);
     }
@@ -213,12 +212,10 @@ namespace MWGui
                 scale = found->second;
         }
 
-        const int diameter = static_cast<int>(44 * scale);
         if (state == Barter && !isMagic)
-            setFrame(backgroundTex,
-                MyGUI::IntCoord(static_cast<int>(2 * scale), static_cast<int>(2 * scale), diameter, diameter));
+            setFrame(backgroundTex, MyGUI::IntCoord(2 * scale, 2 * scale, 44 * scale, 44 * scale));
         else
-            setFrame(backgroundTex, MyGUI::IntCoord(0, 0, diameter, diameter));
+            setFrame(backgroundTex, MyGUI::IntCoord(0, 0, 44 * scale, 44 * scale));
 
         setIcon(ptr);
     }

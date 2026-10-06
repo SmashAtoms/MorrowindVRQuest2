@@ -264,6 +264,10 @@ namespace MWRender
     {
         mSkyRootNode = new CameraRelativeTransform;
         mSkyRootNode->setName("Sky Root");
+        // Assign empty program to specify we don't want shaders when we are rendering in FFP pipeline
+        if (!mSceneManager->getForceShaders())
+            mSkyRootNode->getOrCreateStateSet()->setAttributeAndModes(new osg::Program(),
+                osg::StateAttribute::OVERRIDE | osg::StateAttribute::PROTECTED | osg::StateAttribute::ON);
         mSceneManager->setUpNormalsRTForStateSet(mSkyRootNode->getOrCreateStateSet(), false);
         SceneUtil::ShadowManager::instance().disableShadowsForStateSet(*mSkyRootNode->getOrCreateStateSet());
         parentNode->addChild(mSkyRootNode);
@@ -295,6 +299,8 @@ namespace MWRender
     {
         assert(!mCreated);
 
+        bool forceShaders = mSceneManager->getForceShaders();
+
         mAtmosphereDay = mSceneManager->getInstance(Settings::models().mSkyatmosphere.get(), mEarlyRenderBinRoot);
         ModVertexAlphaVisitor modAtmosphere(ModVertexAlphaVisitor::Atmosphere);
         mAtmosphereDay->accept(modAtmosphere);
@@ -316,7 +322,7 @@ namespace MWRender
 
         ModVertexAlphaVisitor modStars(ModVertexAlphaVisitor::Stars);
         atmosphereNight->accept(modStars);
-        mAtmosphereNightUpdater = new AtmosphereNightUpdater(mSceneManager->getImageManager());
+        mAtmosphereNightUpdater = new AtmosphereNightUpdater(mSceneManager->getImageManager(), forceShaders);
         atmosphereNight->addUpdateCallback(mAtmosphereNightUpdater);
 
         mSun = std::make_unique<Sun>(mEarlyRenderBinRoot, *mSceneManager);
@@ -332,7 +338,7 @@ namespace MWRender
         mCloudMesh = new osg::PositionAttitudeTransform;
         osg::ref_ptr<osg::Node> cloudMeshChild
             = mSceneManager->getInstance(Settings::models().mSkyclouds.get(), mCloudMesh);
-        mCloudUpdater = new CloudUpdater();
+        mCloudUpdater = new CloudUpdater(forceShaders);
         mCloudUpdater->setOpacity(1.f);
         cloudMeshChild->addUpdateCallback(mCloudUpdater);
         mCloudMesh->addChild(cloudMeshChild);
@@ -340,7 +346,7 @@ namespace MWRender
         mNextCloudMesh = new osg::PositionAttitudeTransform;
         osg::ref_ptr<osg::Node> nextCloudMeshChild
             = mSceneManager->getInstance(Settings::models().mSkyclouds.get(), mNextCloudMesh);
-        mNextCloudUpdater = new CloudUpdater();
+        mNextCloudUpdater = new CloudUpdater(forceShaders);
         mNextCloudUpdater->setOpacity(0.f);
         nextCloudMeshChild->addUpdateCallback(mNextCloudUpdater);
         mNextCloudMesh->setNodeMask(0);
@@ -353,12 +359,15 @@ namespace MWRender
         mCloudMesh->accept(modClouds);
         mNextCloudMesh->accept(modClouds);
 
-        Shader::ShaderManager::DefineMap defines = {};
-        Stereo::shaderStereoDefines(defines);
-        auto program = mSceneManager->getShaderManager().getProgram("sky", defines);
-        mEarlyRenderBinRoot->getOrCreateStateSet()->addUniform(new osg::Uniform("pass", -1));
-        mEarlyRenderBinRoot->getOrCreateStateSet()->setAttributeAndModes(
-            program, osg::StateAttribute::ON | osg::StateAttribute::OVERRIDE);
+        if (mSceneManager->getForceShaders())
+        {
+            Shader::ShaderManager::DefineMap defines = {};
+            Stereo::shaderStereoDefines(defines);
+            auto program = mSceneManager->getShaderManager().getProgram("sky", defines);
+            mEarlyRenderBinRoot->getOrCreateStateSet()->addUniform(new osg::Uniform("pass", -1));
+            mEarlyRenderBinRoot->getOrCreateStateSet()->setAttributeAndModes(
+                program, osg::StateAttribute::ON | osg::StateAttribute::OVERRIDE);
+        }
 
         osg::ref_ptr<osg::Depth> depth = new SceneUtil::AutoDepth;
         depth->setWriteMask(false);
@@ -383,9 +392,8 @@ namespace MWRender
         osg::Vec3 rainRange = osg::Vec3(mRainDiameter, mRainDiameter, (mRainMinHeight + mRainMaxHeight) / 2.f);
 
         mRainParticleSystem->setParticleAlignment(osgParticle::ParticleSystem::FIXED);
-        // Vertical placement with some horizontal compression.
-        // Z-down alignment is used so that the UV uses Y-down convention
-        mRainParticleSystem->setAlignVectors(osg::Vec3f(0.1f, 0, 0), osg::Vec3f(0, 0, -1.f));
+        mRainParticleSystem->setAlignVectorX(osg::Vec3f(0.1, 0, 0));
+        mRainParticleSystem->setAlignVectorY(osg::Vec3f(0, 0, 1));
 
         osg::ref_ptr<osg::StateSet> stateset = mRainParticleSystem->getOrCreateStateSet();
 
@@ -510,7 +518,7 @@ namespace MWRender
 
     bool SkyManager::getRainRipplesEnabled() const
     {
-        if (!mEnabled)
+        if (!mEnabled || mIsStorm)
             return false;
 
         if (hasRain())
@@ -524,7 +532,10 @@ namespace MWRender
 
     float SkyManager::getPrecipitationAlpha() const
     {
-        return mPrecipitationAlpha;
+        if (mEnabled && !mIsStorm && (hasRain() || mParticleNode))
+            return mPrecipitationAlpha;
+
+        return 0.f;
     }
 
     void SkyManager::update(float duration)
@@ -720,7 +731,7 @@ namespace MWRender
                         = static_cast<osgParticle::ParticleSystem*>(findPSVisitor.mFoundNodes[i]);
 
                     osg::ref_ptr<osgParticle::ModularProgram> program = new osgParticle::ModularProgram;
-                    if (occlusionEnabledForEffect)
+                    if (!mIsStorm)
                         program->addOperator(new WrapAroundOperator(mCamera, defaultWrapRange));
                     program->addOperator(new WeatherAlphaOperator(mPrecipitationAlpha, false));
                     program->setParticleSystem(ps);
@@ -754,7 +765,7 @@ namespace MWRender
             mClouds = weather.mCloudTexture;
 
             const VFS::Path::Normalized texture
-                = Misc::ResourceHelpers::correctTexturePath(VFS::Path::toNormalized(mClouds), *mSceneManager->getVFS());
+                = Misc::ResourceHelpers::correctTexturePath(mClouds, mSceneManager->getVFS());
 
             osg::ref_ptr<osg::Texture2D> cloudTex
                 = new osg::Texture2D(mSceneManager->getImageManager()->getImage(texture));
@@ -776,8 +787,8 @@ namespace MWRender
 
             if (!mNextClouds.empty())
             {
-                const VFS::Path::Normalized texture = Misc::ResourceHelpers::correctTexturePath(
-                    VFS::Path::toNormalized(mNextClouds), *mSceneManager->getVFS());
+                const VFS::Path::Normalized texture
+                    = Misc::ResourceHelpers::correctTexturePath(mNextClouds, mSceneManager->getVFS());
 
                 osg::ref_ptr<osg::Texture2D> cloudTex
                     = new osg::Texture2D(mSceneManager->getImageManager()->getImage(texture));

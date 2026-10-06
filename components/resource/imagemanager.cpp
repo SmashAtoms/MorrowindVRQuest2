@@ -42,32 +42,6 @@ namespace
         return warningImage;
     }
 
-    bool isS3TC(osg::Image* image)
-    {
-        switch (image->getPixelFormat())
-        {
-            case GL_COMPRESSED_RGB_S3TC_DXT1_EXT:
-            case GL_COMPRESSED_RGBA_S3TC_DXT1_EXT:
-            case GL_COMPRESSED_RGBA_S3TC_DXT3_EXT:
-            case GL_COMPRESSED_RGBA_S3TC_DXT5_EXT:
-                return true;
-        }
-        return false;
-    }
-
-    bool checkSupported(osg::Image* image)
-    {
-        // not bothering with checks for other compression formats right now
-        if (!isS3TC(image))
-            return true;
-
-        // hashtag yolo (CS might not have context when loading assets)
-        if (!SceneUtil::glExtensionsReady())
-            return true;
-
-        return SceneUtil::getGLExtensions().isTextureCompressionS3TCSupported;
-    }
-
 }
 
 namespace Resource
@@ -76,11 +50,40 @@ namespace Resource
     ImageManager::ImageManager(const VFS::Manager* vfs, double expiryDelay)
         : ResourceManager(vfs, expiryDelay)
         , mWarningImage(createWarningImage())
-        , mOptions(new osgDB::Options("dds_dxt1_detect_rgba ignoreTga2Fields"))
+        , mOptions(new osgDB::Options("dds_flip dds_dxt1_detect_rgba ignoreTga2Fields"))
+        , mOptionsNoFlip(new osgDB::Options("dds_dxt1_detect_rgba ignoreTga2Fields"))
     {
     }
 
     ImageManager::~ImageManager() {}
+
+    bool checkSupported(osg::Image* image)
+    {
+        switch (image->getPixelFormat())
+        {
+            case (GL_COMPRESSED_RGB_S3TC_DXT1_EXT):
+            case (GL_COMPRESSED_RGBA_S3TC_DXT1_EXT):
+            case (GL_COMPRESSED_RGBA_S3TC_DXT3_EXT):
+            case (GL_COMPRESSED_RGBA_S3TC_DXT5_EXT):
+            {
+                if (!SceneUtil::glExtensionsReady())
+                    return true; // hashtag yolo (CS might not have context when loading assets)
+                osg::GLExtensions& exts = SceneUtil::getGLExtensions();
+                if (!exts.isTextureCompressionS3TCSupported
+                    // This one works too. Should it be included in isTextureCompressionS3TCSupported()? Submitted as a
+                    // patch to OSG.
+                    && !osg::isGLExtensionSupported(exts.contextID, "GL_S3_s3tc"))
+                {
+                    return false;
+                }
+                break;
+            }
+            // not bothering with checks for other compression formats right now
+            default:
+                return true;
+        }
+        return true;
+    }
 
     osg::ref_ptr<osg::Image> ImageManager::getImage(VFS::Path::NormalizedView path, bool disableFlip)
     {
@@ -133,7 +136,8 @@ namespace Resource
                 stream->seekg(0);
             }
 
-            osgDB::ReaderWriter::ReadResult result = reader->readImage(*stream, mOptions);
+            osgDB::ReaderWriter::ReadResult result
+                = reader->readImage(*stream, disableFlip ? mOptionsNoFlip : mOptions);
             if (!result.success())
             {
                 Log(Debug::Error) << "Error loading " << path << ": " << result.message() << " code "
@@ -160,10 +164,8 @@ namespace Resource
                     // requires update to getColor() to be released with OSG 3.6
                     osg::ref_ptr<osg::Image> newImage = new osg::Image;
                     newImage->setFileName(image->getFileName());
-                    newImage->setOrigin(image->getOrigin());
-                    // Always RGBA: an NPOT-width GL_RGB image hits GL_UNPACK_ALIGNMENT row padding on
-                    // gl4es/GLES, shearing the texture into vertical stripes. RGBA is always 4-aligned.
-                    newImage->allocateImage(image->s(), image->t(), image->r(), GL_RGBA, GL_UNSIGNED_BYTE);
+                    newImage->allocateImage(image->s(), image->t(), image->r(),
+                        image->isImageTranslucent() ? GL_RGBA : GL_RGB, GL_UNSIGNED_BYTE);
                     for (int s = 0; s < image->s(); ++s)
                         for (int t = 0; t < image->t(); ++t)
                             for (int r = 0; r < image->r(); ++r)
@@ -175,7 +177,6 @@ namespace Resource
             {
                 osg::ref_ptr<osg::Image> newImage = new osg::Image;
                 newImage->setFileName(image->getFileName());
-                newImage->setOrigin(image->getOrigin());
                 newImage->allocateImage(image->s(), image->t(), image->r(), GL_RGB, GL_UNSIGNED_BYTE);
                 // OSG just won't write the alpha as there's nowhere to put it.
                 for (int s = 0; s < image->s(); ++s)
@@ -184,49 +185,6 @@ namespace Resource
                             newImage->setColor(image->getColor(s, t, r), s, t, r);
                 image = newImage;
             }
-
-            // OSG might not set the right origin for DDS
-            if (ext == "dds")
-                image->setOrigin(osg::Image::TOP_LEFT);
-
-            // Convert the image to the convention we expect
-            if (image->getOrigin() == osg::Image::BOTTOM_LEFT && !disableFlip)
-            {
-                if (image->isCompressed() && !isS3TC(image))
-                {
-                    // This is most likely a KTX texture that OSG can't flip
-                    // We don't want it to be corrupted or displayed incorrectly, so bail
-                    // OSGoS *can* flip RGTC, but we can't verify that (yet?)
-                    Log(Debug::Error) << "Error loading " << path << ": cannot flip non-S3TC compressed texture";
-                    mCache->addEntryToObjectCache(path.value(), mWarningImage);
-                    return mWarningImage;
-                }
-
-                image->flipVertical();
-                image->setOrigin(osg::Image::TOP_LEFT);
-            }
-
-#ifdef __ANDROID__
-            // GLES/gl4es mishandles GL_BGRA source data (garbled/striped). Convert to native RGBA on
-            // the CPU so the upload is clean. (getColor reads BGRA correctly; setColor writes RGBA.)
-            if (!image->isCompressed()
-                && (image->getPixelFormat() == GL_BGRA || image->getPixelFormat() == GL_BGR))
-            {
-                osg::ref_ptr<osg::Image> rgba = new osg::Image;
-                rgba->setFileName(image->getFileName());
-                rgba->setOrigin(image->getOrigin());
-                rgba->allocateImage(image->s(), image->t(), image->r(), GL_RGBA, GL_UNSIGNED_BYTE);
-                for (int s = 0; s < image->s(); ++s)
-                    for (int t = 0; t < image->t(); ++t)
-                        for (int r = 0; r < image->r(); ++r)
-                            rgba->setColor(image->getColor(s, t, r), s, t, r);
-                image = rgba;
-            }
-            // OSG's default unpack alignment (4) shears tightly-packed RGB textures of NPOT width into
-            // vertical stripes under gl4es/GLES. Our image data is tightly packed, so alignment must be 1.
-            if (!image->isCompressed())
-                image->setPacking(1);
-#endif
 
             mCache->addEntryToObjectCache(path.value(), image);
             return image;

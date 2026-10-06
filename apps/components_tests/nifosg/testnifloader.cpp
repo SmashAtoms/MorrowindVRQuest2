@@ -100,7 +100,7 @@ osg::Group {
           UDC_UserObjects 1 {
             osg::UIntValueObject {
               UniqueID 6
-              Name "recordIndex"
+              Name "recIndex"
               Value 4294967295
             }
           }
@@ -137,10 +137,10 @@ osg::Group {
       UserDataContainer TRUE {
         osg::DefaultUserDataContainer {
           UniqueID 5
-          UDC_UserObjects 2 {
+          UDC_UserObjects 3 {
             osg::UIntValueObject {
               UniqueID 6
-              Name "recordIndex"
+              Name "recIndex"
               Value 4294967295
             }
             osg::StringValueObject {
@@ -149,12 +149,17 @@ osg::Group {
               Value ")"
             << shaderPrefix << R"("
             }
+            osg::BoolValueObject {
+              UniqueID 8
+              Name "shaderRequired"
+              Value TRUE
+            }
           }
         }
       }
       StateSet TRUE {
         osg::StateSet {
-          UniqueID 8
+          UniqueID 9
         }
       }
     }
@@ -189,10 +194,10 @@ osg::Group {
       UserDataContainer TRUE {
         osg::DefaultUserDataContainer {
           UniqueID 5
-          UDC_UserObjects 2 {
+          UDC_UserObjects 3 {
             osg::UIntValueObject {
               UniqueID 6
-              Name "recordIndex"
+              Name "recIndex"
               Value 4294967295
             }
             osg::StringValueObject {
@@ -201,18 +206,23 @@ osg::Group {
               Value ")"
             << shaderPrefix << R"("
             }
+            osg::BoolValueObject {
+              UniqueID 8
+              Name "shaderRequired"
+              Value TRUE
+            }
           }
         }
       }
       StateSet TRUE {
         osg::StateSet {
-          UniqueID 8
+          UniqueID 9
           ModeList 1 {
             GL_DEPTH_TEST ON
           }
           AttributeList 1 {
             osg::Depth {
-              UniqueID 9
+              UniqueID 10
               Function LEQUAL
             }
             Value OFF
@@ -247,7 +257,7 @@ osg::Group {
         Nif::NiAVObject node;
         init(node);
         Nif::BSShaderPPLightingProperty property;
-        property.mRecordType = Nif::RC_BSShaderPPLightingProperty;
+        property.recType = Nif::RC_BSShaderPPLightingProperty;
         property.mTextureSet = nullptr;
         property.mController = nullptr;
         property.mType = GetParam().mShaderType;
@@ -275,7 +285,7 @@ osg::Group {
         Nif::NiAVObject node;
         init(node);
         Nif::BSLightingShaderProperty property;
-        property.mRecordType = Nif::RC_BSLightingShaderProperty;
+        property.recType = Nif::RC_BSLightingShaderProperty;
         property.mTextureSet = nullptr;
         property.mController = nullptr;
         property.mType = GetParam().mShaderType;

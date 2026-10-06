@@ -140,12 +140,13 @@ namespace MWRender
 
         mHUDCamera->setReferenceFrame(osg::Camera::ABSOLUTE_RF);
         mHUDCamera->setRenderOrder(osg::Camera::POST_RENDER);
-        mHUDCamera->setClearColor(osg::Vec4(0.45f, 0.45f, 0.14f, 1.f));
+        mHUDCamera->setClearColor(osg::Vec4(0.45, 0.45, 0.14, 1.0));
         mHUDCamera->setClearMask(0);
         mHUDCamera->setProjectionMatrix(osg::Matrix::ortho2D(0, 1, 0, 1));
         mHUDCamera->setAllowEventFocus(false);
         mHUDCamera->setViewport(0, 0, mWidth, mHeight);
         mHUDCamera->setNodeMask(Mask_RenderToTexture);
+        mHUDCamera->getOrCreateStateSet()->setMode(GL_LIGHTING, osg::StateAttribute::OFF);
         mHUDCamera->getOrCreateStateSet()->setMode(GL_DEPTH_TEST, osg::StateAttribute::OFF);
         mHUDCamera->addChild(mCanvases[0]);
         mHUDCamera->addChild(mCanvases[1]);
@@ -209,7 +210,7 @@ namespace MWRender
         else
             Log(Debug::Error) << "'glDisablei' unsupported, pass normals will not be available to shaders.";
 
-        mGLSLVersion = static_cast<int>(ext->glslLanguageVersion * 100);
+        mGLSLVersion = ext->glslLanguageVersion * 100;
         mUBO = ext->isUniformBufferObjectSupported && mGLSLVersion >= 330;
         mStateUpdater = new Fx::StateUpdater(mUBO);
 
@@ -288,7 +289,7 @@ namespace MWRender
 
     void PostProcessor::traverse(osg::NodeVisitor& nv)
     {
-        unsigned frameId = nv.getTraversalNumber() % 2;
+        size_t frameId = nv.getTraversalNumber() % 2;
 
         if (nv.getVisitorType() == osg::NodeVisitor::CULL_VISITOR)
             cull(frameId, static_cast<osgUtil::CullVisitor*>(&nv));
@@ -298,7 +299,7 @@ namespace MWRender
         osg::Group::traverse(nv);
     }
 
-    void PostProcessor::cull(unsigned frameId, osgUtil::CullVisitor* cv)
+    void PostProcessor::cull(size_t frameId, osgUtil::CullVisitor* cv)
     {
         if (const auto& fbo = getFbo(FBO_Intercept, frameId))
         {
@@ -332,13 +333,11 @@ namespace MWRender
 
 // ## VR_PATCH BEGIN
         if (VR::getVR())
-            mStateUpdater->setResolution(
-                osg::Vec2f(static_cast<float>(renderWidth()), static_cast<float>(renderHeight())));
+            mStateUpdater->setResolution(osg::Vec2f(renderWidth(), renderHeight()));
         else
 // ## VR_PATCH END
-            mStateUpdater->setResolution(osg::Vec2f(
-                static_cast<float>(cv->getViewport()->width()), static_cast<float>(cv->getViewport()->height())));
-        
+            mStateUpdater->setResolution(osg::Vec2f(cv->getViewport()->width(), cv->getViewport()->height()));
+
         // per-frame data
         if (frame != mLastFrameNumber)
         {
@@ -492,8 +491,8 @@ namespace MWRender
         textures[Tex_Distortion]->setSourceFormat(GL_RGB);
         textures[Tex_Distortion]->setInternalFormat(GL_RGB);
 
-        Stereo::setMultiviewCompatibleTextureSize(textures[Tex_Distortion], static_cast<int>(width * DistortionRatio),
-            static_cast<int>(height * DistortionRatio));
+        Stereo::setMultiviewCompatibleTextureSize(
+            textures[Tex_Distortion], width * DistortionRatio, height * DistortionRatio);
         textures[Tex_Distortion]->dirtyTextureObject();
 
         auto setupDepth = [](osg::Texture* tex) {
@@ -657,7 +656,7 @@ namespace MWRender
 
                 if (auto type = uniform->getType())
                     uniform->setUniform(node.mRootStateSet->getOrCreateUniform(
-                        uniform->mName, *type, static_cast<unsigned>(uniform->getNumElements())));
+                        uniform->mName.c_str(), *type, uniform->getNumElements()));
             }
 
             for (const auto& pass : technique->getPasses())
@@ -671,9 +670,7 @@ namespace MWRender
 
                 if (!pass->getTarget().empty())
                 {
-                    // FIXME: https://gitlab.com/OpenMW/openmw/-/work_items/9034
-                    std::string target = pass->getTarget();
-                    auto& renderTarget = technique->getRenderTargetsMap()[target];
+                    auto& renderTarget = technique->getRenderTargetsMap()[pass->getTarget()];
                     subPass.mSize = renderTarget.mSize;
                     subPass.mRenderTexture = renderTarget.mTarget;
                     subPass.mMipMap = renderTarget.mMipMap;
@@ -737,8 +734,7 @@ namespace MWRender
         if (auto hud = MWBase::Environment::get().getWindowManager()->getPostProcessorHud())
             hud->updateTechniques();
 
-        if (mUsePostProcessing)
-            mRendering.getSkyManager()->setSunglare(sunglare);
+        mRendering.getSkyManager()->setSunglare(sunglare);
 
         if (dirtyAttachments)
             mCanvases[frameId]->setDirtyAttachments(attachmentsToDirty);
@@ -752,7 +748,7 @@ namespace MWRender
 
         disableTechnique(technique, false);
 
-        size_t pos = std::min(location.value_or(mTechniques.size()) + mInternalTechniques.size(), mTechniques.size());
+        int pos = std::min<int>(location.value_or(mTechniques.size()) + mInternalTechniques.size(), mTechniques.size());
 
         mTechniques.insert(mTechniques.begin() + pos, technique);
         dirtyTechniques(Settings::ShaderManager::get().getMode() == Settings::ShaderManager::Mode::Debug);

@@ -11,7 +11,7 @@ namespace ESM
         esm.writeHNRefId("ID__", mId);
         esm.writeHNT("VEC3", mPosition);
         esm.writeHNT("QUAT", mOrientation);
-        esm.writeFormId(mCaster, true, "ACTO");
+        esm.writeHNT("ACTO", mActorId);
     }
 
     void BaseProjectileState::load(ESMReader& esm)
@@ -19,13 +19,7 @@ namespace ESM
         mId = esm.getHNRefId("ID__");
         esm.getHNT("VEC3", mPosition.mValues);
         esm.getHNT("QUAT", mOrientation.mValues);
-        if (esm.getFormatVersion() <= MaxActorIdSaveGameFormatVersion)
-        {
-            mCaster.mIndex = static_cast<uint32_t>(-1);
-            esm.getHNT(mCaster.mIndex, "ACTO");
-        }
-        else
-            mCaster = esm.getFormId(true, "ACTO");
+        esm.getHNT(mActorId, "ACTO");
     }
 
     void MagicBoltState::save(ESMWriter& esm) const

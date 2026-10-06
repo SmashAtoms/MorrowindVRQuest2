@@ -261,7 +261,7 @@ namespace MWGui
             return;
 
         mSpellView->setModel(new SpellModel(MWMechanics::getPlayer()));
-        int itemCount = static_cast<int>(mSpellView->getModel()->getItemCount());
+        int itemCount = mSpellView->getModel()->getItemCount();
         if (itemCount == 0)
             return;
 

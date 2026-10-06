@@ -110,7 +110,7 @@ namespace MWGui
         MyGUI::Widget* mSpellPowerList;
         std::vector<MyGUI::Widget*> mSpellPowerItems;
 
-        size_t mGenderIndex, mFaceIndex, mHairIndex;
+        int mGenderIndex, mFaceIndex, mHairIndex;
 
         ESM::RefId mCurrentRaceId;
 

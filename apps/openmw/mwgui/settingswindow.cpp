@@ -1,6 +1,8 @@
 #include "settingswindow.hpp"
 
 #include <array>
+#include <iomanip>
+#include <regex>
 
 #include <unicode/locid.h>
 
@@ -21,7 +23,9 @@
 #include <components/lua_ui/scriptsettings.hpp>
 #include <components/misc/constants.hpp>
 #include <components/misc/display.hpp>
+#include <components/misc/pathhelpers.hpp>
 #include <components/misc/strings/algorithm.hpp>
+#include <components/misc/strings/format.hpp>
 #include <components/resource/resourcesystem.hpp>
 #include <components/resource/scenemanager.hpp>
 #include <components/sceneutil/lightmanager.hpp>
@@ -39,7 +43,6 @@
 #include "../mwlua/luamanagerimp.hpp"
 
 #include "confirmationdialog.hpp"
-#include "weightedsearch.hpp"
 
 //## VR_PATCH BEGIN
 #include "../mwvr/vrgui.hpp"
@@ -75,6 +78,9 @@ namespace
         std::string_view result;
         switch (method)
         {
+            case SceneUtil::LightingMethod::FFP:
+                result = "#{OMWEngine:LightingMethodLegacy}";
+                break;
             case SceneUtil::LightingMethod::PerObjectUniform:
                 result = "#{OMWEngine:LightingMethodShadersCompatibility}";
                 break;
@@ -141,18 +147,6 @@ namespace
         else
             box->setIndexSelected(MyGUI::ITEM_NONE);
     }
-
-    void updateSliderLabel(MyGUI::ScrollBar* scroller, MyGUI::TextBox* textBox,
-        const std::vector<icu::UnicodeString>& argNames, const std::vector<icu::Formattable>& args)
-    {
-        if (textBox != nullptr)
-        {
-            auto l10n = MWBase::Environment::get().getL10nManager()->getContext("OMWEngine");
-            std::string labelCaption
-                = l10n->formatMessage(scroller->getUserString("SettingLabelCaption"), argNames, args);
-            textBox->setCaption(labelCaption);
-        }
-    }
 }
 
 namespace MWGui
@@ -177,9 +171,8 @@ namespace MWGui
             if (type == sliderType)
             {
                 MyGUI::ScrollBar* scroll = current->castType<MyGUI::ScrollBar>();
+                std::string valueStr;
                 std::string_view valueType = getSettingValueType(current);
-                std::vector<icu::UnicodeString> argNames;
-                std::vector<icu::Formattable> args;
                 if (valueType == "Float" || valueType == "Integer" || valueType == "Cell")
                 {
                     // TODO: ScrollBar isn't meant for this. should probably use a dedicated FloatSlider widget
@@ -190,20 +183,21 @@ namespace MWGui
                     if (valueType == "Cell")
                     {
                         value = Settings::get<float>(getSettingCategory(current), getSettingName(current));
-                        argNames.emplace_back("cells");
-                        args.emplace_back(value / Constants::CellSizeInUnits);
+                        std::stringstream ss;
+                        ss << std::fixed << std::setprecision(2) << value / Constants::CellSizeInUnits;
+                        valueStr = ss.str();
                     }
                     else if (valueType == "Float")
                     {
                         value = Settings::get<float>(getSettingCategory(current), getSettingName(current));
-                        argNames.emplace_back("value");
-                        args.emplace_back(value);
+                        std::stringstream ss;
+                        ss << std::fixed << std::setprecision(2) << value;
+                        valueStr = ss.str();
                     }
                     else
                     {
                         const int intValue = Settings::get<int>(getSettingCategory(current), getSettingName(current));
-                        argNames.emplace_back("value");
-                        args.emplace_back(intValue);
+                        valueStr = MyGUI::utility::toString(intValue);
                         value = static_cast<float>(intValue);
                     }
 
@@ -215,15 +209,14 @@ namespace MWGui
                 else
                 {
                     const int value = Settings::get<int>(getSettingCategory(current), getSettingName(current));
-                    argNames.emplace_back("value");
-                    args.emplace_back(value);
+                    valueStr = MyGUI::utility::toString(value);
                     scroll->setScrollPosition(value);
                 }
                 if (init)
                     scroll->eventScrollChangePosition
                         += MyGUI::newDelegate(this, &SettingsWindow::onSliderChangePosition);
                 if (scroll->getVisible())
-                    updateSliderLabel(scroll, getSliderLabel(scroll), argNames, args);
+                    updateSliderLabel(scroll, valueStr);
             }
 
             configureWidgets(current, init);
@@ -240,16 +233,17 @@ namespace MWGui
         }
     }
 
-    MyGUI::TextBox* SettingsWindow::getSliderLabel(MyGUI::ScrollBar* scroller) const
+    void SettingsWindow::updateSliderLabel(MyGUI::ScrollBar* scroller, const std::string& value)
     {
         auto labelWidgetName = scroller->getUserString("SettingLabelWidget");
         if (!labelWidgetName.empty())
         {
             MyGUI::TextBox* textBox;
             getWidget(textBox, labelWidgetName);
-            return textBox;
+            std::string labelCaption{ scroller->getUserString("SettingLabelCaption") };
+            labelCaption = Misc::StringUtils::format(labelCaption, value);
+            textBox->setCaptionWithReplacing(labelCaption);
         }
-        return nullptr;
     }
 
     SettingsWindow::SettingsWindow(Files::ConfigurationManager& cfgMgr)
@@ -257,7 +251,7 @@ namespace MWGui
         : WindowBase(VR::getVR() ? "openmw_settings_window_vr.layout" : "openmw_settings_window.layout")
 //## VR_PATCH END
         , mKeyboardMode(true)
-        , mCurrentPage(static_cast<size_t>(-1))
+        , mCurrentPage(-1)
         , mCfgMgr(cfgMgr)
     {
         const bool terrain = Settings::terrain().mDistantTerrain;
@@ -436,14 +430,14 @@ namespace MWGui
         constexpr VFS::Path::NormalizedView l10n("l10n/");
         for (const auto& path : vfs->getRecursiveDirectoryIterator(l10n))
         {
-            if (path.extension() == "yaml")
+            if (Misc::getFileExtension(path) == "yaml")
             {
-                std::string_view localeName(path.stem());
+                std::string localeName(Misc::stemFile(path));
                 if (localeName == "gmst")
                     continue; // fake locale to get gmst strings from content files
                 if (std::find(availableLanguages.begin(), availableLanguages.end(), localeName)
                     == availableLanguages.end())
-                    availableLanguages.emplace_back(localeName);
+                    availableLanguages.push_back(std::move(localeName));
             }
         }
 
@@ -672,7 +666,7 @@ namespace MWGui
 
     void SettingsWindow::onMaxLightsChanged(MyGUI::ComboBox* /*sender*/, size_t pos)
     {
-        Settings::shaders().mMaxLights.set(8 * static_cast<int>(pos + 1));
+        Settings::shaders().mMaxLights.set(8 * (pos + 1));
         apply();
         configureWidgets(mMainWidget, false);
     }
@@ -688,7 +682,6 @@ namespace MWGui
 
         Settings::shaders().mForcePerPixelLighting.reset();
         Settings::shaders().mClassicFalloff.reset();
-        Settings::shaders().mClampLighting.reset();
         Settings::shaders().mMatchSunlightToSun.reset();
         Settings::shaders().mLightBoundsMultiplier.reset();
         Settings::shaders().mMaximumLightDistance.reset();
@@ -763,8 +756,7 @@ namespace MWGui
     {
         if (getSettingType(scroller) == "Slider")
         {
-            std::vector<icu::UnicodeString> argNames;
-            std::vector<icu::Formattable> args;
+            std::string valueStr;
             std::string_view valueType = getSettingValueType(scroller);
             if (valueType == "Float" || valueType == "Integer" || valueType == "Cell")
             {
@@ -777,31 +769,30 @@ namespace MWGui
                 if (valueType == "Cell")
                 {
                     Settings::get<float>(getSettingCategory(scroller), getSettingName(scroller)).set(value);
-                    argNames.emplace_back("cells");
-                    args.emplace_back(value / Constants::CellSizeInUnits);
+                    std::stringstream ss;
+                    ss << std::fixed << std::setprecision(2) << value / Constants::CellSizeInUnits;
+                    valueStr = ss.str();
                 }
                 else if (valueType == "Float")
                 {
                     Settings::get<float>(getSettingCategory(scroller), getSettingName(scroller)).set(value);
-                    argNames.emplace_back("value");
-                    args.emplace_back(value);
+                    std::stringstream ss;
+                    ss << std::fixed << std::setprecision(2) << value;
+                    valueStr = ss.str();
                 }
                 else
                 {
-                    int intValue = static_cast<int>(value);
-                    Settings::get<int>(getSettingCategory(scroller), getSettingName(scroller)).set(intValue);
-                    argNames.emplace_back("value");
-                    args.emplace_back(intValue);
+                    Settings::get<int>(getSettingCategory(scroller), getSettingName(scroller))
+                        .set(static_cast<int>(value));
+                    valueStr = MyGUI::utility::toString(int(value));
                 }
             }
             else
             {
-                int intValue = static_cast<int>(pos);
-                Settings::get<int>(getSettingCategory(scroller), getSettingName(scroller)).set(intValue);
-                argNames.emplace_back("value");
-                args.emplace_back(intValue);
+                Settings::get<int>(getSettingCategory(scroller), getSettingName(scroller)).set(pos);
+                valueStr = MyGUI::utility::toString(pos);
             }
-            updateSliderLabel(scroller, getSliderLabel(scroller), argNames, args);
+            updateSliderLabel(scroller, valueStr);
 
             apply();
         }
@@ -898,7 +889,8 @@ namespace MWGui
 
         mLightingMethodButton->removeAllItems();
 
-        std::array<SceneUtil::LightingMethod, 2> methods = {
+        std::array<SceneUtil::LightingMethod, 3> methods = {
+            SceneUtil::LightingMethod::FFP,
             SceneUtil::LightingMethod::PerObjectUniform,
             SceneUtil::LightingMethod::SingleUBO,
         };
@@ -980,12 +972,12 @@ namespace MWGui
         const int h = Settings::gui().mFontSize + 2;
         const int w = mControlsBox->getWidth() - 28;
         const int noWidgetsInRow = 2;
-        const int totalH = static_cast<int>(mControlsBox->getChildCount() / noWidgetsInRow) * h;
+        const int totalH = mControlsBox->getChildCount() / noWidgetsInRow * h;
 
         for (size_t i = 0; i < mControlsBox->getChildCount(); i++)
         {
             MyGUI::Widget* widget = mControlsBox->getChildAt(i);
-            widget->setCoord(0, static_cast<int>(i / noWidgetsInRow * h), w, h);
+            widget->setCoord(0, i / noWidgetsInRow * h, w, h);
         }
 
         // Canvas size must be expressed with VScroll disabled, otherwise MyGUI would expand the scroll area when the
@@ -993,6 +985,42 @@ namespace MWGui
         mControlsBox->setVisibleVScroll(false);
         mControlsBox->setCanvasSize(mControlsBox->getWidth(), std::max(totalH, mControlsBox->getHeight()));
         mControlsBox->setVisibleVScroll(true);
+    }
+
+    namespace
+    {
+        std::string escapeRegex(const std::string& str)
+        {
+            static const std::regex specialChars(R"r([\^\.\[\$\(\)\|\*\+\?\{])r", std::regex_constants::extended);
+            return std::regex_replace(str, specialChars, R"(\$&)");
+        }
+
+        std::regex wordSearch(const std::string& query)
+        {
+            static const std::regex wordsRegex(R"([^[:space:]]+)", std::regex_constants::extended);
+            auto wordsBegin = std::sregex_iterator(query.begin(), query.end(), wordsRegex);
+            auto wordsEnd = std::sregex_iterator();
+            std::string searchRegex("(");
+            for (auto it = wordsBegin; it != wordsEnd; ++it)
+            {
+                if (it != wordsBegin)
+                    searchRegex += '|';
+                searchRegex += escapeRegex(query.substr(it->position(), it->length()));
+            }
+            searchRegex += ')';
+            // query had only whitespace characters
+            if (searchRegex == "()")
+                searchRegex = "^(.*)$";
+            return std::regex(searchRegex, std::regex_constants::extended | std::regex_constants::icase);
+        }
+
+        double weightedSearch(const std::regex& regex, const std::string& text)
+        {
+            std::smatch matches;
+            std::regex_search(text, matches, regex);
+            // need a signed value, so cast to double (not an integer type to guarantee no overflow)
+            return static_cast<double>(matches.size());
+        }
     }
 
     void SettingsWindow::renderScriptSettings()
@@ -1006,29 +1034,24 @@ namespace MWGui
         {
             size_t mIndex;
             std::string mName;
-            size_t mNameWeight;
-            size_t mHintWeight;
+            double mNameWeight;
+            double mHintWeight;
 
-            constexpr bool operator<(const WeightedPage& rhs) const
-            {
-                if (mNameWeight != rhs.mNameWeight)
-                    return mNameWeight > rhs.mNameWeight;
-                if (mHintWeight != rhs.mHintWeight)
-                    return mHintWeight > rhs.mHintWeight;
-                return mName < rhs.mName;
-            }
+            constexpr auto tie() const { return std::tie(mNameWeight, mHintWeight, mName); }
+
+            constexpr bool operator<(const WeightedPage& rhs) const { return tie() < rhs.tie(); }
         };
 
-        const std::vector<std::string> patternArray = generatePatternArray(mScriptFilter->getCaption());
+        std::regex searchRegex = wordSearch(mScriptFilter->getCaption());
         std::vector<WeightedPage> weightedPages;
         weightedPages.reserve(LuaUi::scriptSettingsPageCount());
         for (size_t i = 0; i < LuaUi::scriptSettingsPageCount(); ++i)
         {
             LuaUi::ScriptSettingsPage page = LuaUi::scriptSettingsPageAt(i);
-            size_t nameWeight = weightedSearch(page.mName, patternArray);
-            size_t hintWeight = weightedSearch(page.mSearchHints, patternArray);
+            double nameWeight = weightedSearch(searchRegex, page.mName);
+            double hintWeight = weightedSearch(searchRegex, page.mSearchHints);
             if ((nameWeight + hintWeight) > 0)
-                weightedPages.push_back({ i, page.mName, nameWeight, hintWeight });
+                weightedPages.push_back({ i, page.mName, -nameWeight, -hintWeight });
         }
         std::sort(weightedPages.begin(), weightedPages.end());
         for (const WeightedPage& weightedPage : weightedPages)
@@ -1052,7 +1075,7 @@ namespace MWGui
     void SettingsWindow::onScriptListSelection(MyGUI::ListBox*, size_t index)
     {
         mScriptAdapter->detach();
-        mCurrentPage = static_cast<size_t>(-1);
+        mCurrentPage = -1;
         if (index < mScriptList->getItemCount())
         {
             mCurrentPage = *mScriptList->getItemDataAt<size_t>(index);
@@ -1166,7 +1189,7 @@ namespace MWGui
         else if (arg.button == SDL_CONTROLLER_BUTTON_LEFTSHOULDER)
         {
             size_t index = mSettingsTab->getIndexSelected();
-            index = wrap(index, mSettingsTab->getItemCount(), -1);
+            index = wrap(index - 1, mSettingsTab->getItemCount());
             mSettingsTab->setIndexSelected(index);
             MWBase::Environment::get().getWindowManager()->playSound(ESM::RefId::stringRefId("Menu Click"));
             return true;
@@ -1174,7 +1197,7 @@ namespace MWGui
         else if (arg.button == SDL_CONTROLLER_BUTTON_RIGHTSHOULDER)
         {
             size_t index = mSettingsTab->getIndexSelected();
-            index = wrap(index, mSettingsTab->getItemCount(), 1);
+            index = wrap(index + 1, mSettingsTab->getItemCount());
             mSettingsTab->setIndexSelected(index);
             MWBase::Environment::get().getWindowManager()->playSound(ESM::RefId::stringRefId("Menu Click"));
             return true;

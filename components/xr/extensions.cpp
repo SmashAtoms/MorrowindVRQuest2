@@ -4,13 +4,6 @@
 #include <cassert>
 #include <openxr/openxr.h>
 
-#ifdef XR_USE_PLATFORM_ANDROID
-#include <EGL/egl.h> // openxr_platform.h's GLES structs reference EGL types
-#include <jni.h>
-#include <SDL_system.h>
-#include <openxr/openxr_platform.h>
-#endif
-
 #include <components/debug/debuglog.hpp>
 #include <components/settings/settings.hpp>
 
@@ -22,31 +15,6 @@ namespace XR
     {
         assert(sExtensions);
         return *sExtensions;
-    }
-
-    void initAndroidLoader()
-    {
-#ifdef XR_USE_PLATFORM_ANDROID
-        JNIEnv* jniEnv = static_cast<JNIEnv*>(SDL_AndroidGetJNIEnv());
-        JavaVM* javaVm = nullptr;
-        if (jniEnv)
-            jniEnv->GetJavaVM(&javaVm);
-        jobject activity = static_cast<jobject>(SDL_AndroidGetActivity());
-
-        PFN_xrInitializeLoaderKHR xrInitializeLoaderKHR = nullptr;
-        if (XR_SUCCEEDED(xrGetInstanceProcAddr(XR_NULL_HANDLE, "xrInitializeLoaderKHR",
-                reinterpret_cast<PFN_xrVoidFunction*>(&xrInitializeLoaderKHR)))
-            && xrInitializeLoaderKHR)
-        {
-            XrLoaderInitInfoAndroidKHR loaderInitInfo{};
-            loaderInitInfo.type = XR_TYPE_LOADER_INIT_INFO_ANDROID_KHR;
-            loaderInitInfo.applicationVM = javaVm;
-            loaderInitInfo.applicationContext = activity;
-            xrInitializeLoaderKHR(reinterpret_cast<const XrLoaderInitInfoBaseHeaderKHR*>(&loaderInitInfo));
-        }
-        else
-            Log(Debug::Warning) << "xrInitializeLoaderKHR not available; OpenXR init may fail on Android";
-#endif
     }
 
     Extensions::Extensions()
@@ -137,18 +105,6 @@ namespace XR
 
     XrInstance Extensions::createXrInstance(const std::string& name)
     {
-#ifdef XR_USE_PLATFORM_ANDROID
-        // The instance must be created with XR_KHR_android_create_instance carrying the
-        // JavaVM + activity. The loader itself is initialised earlier, in initAndroidLoader().
-        requestExtension(XR_KHR_ANDROID_CREATE_INSTANCE_EXTENSION_NAME);
-
-        JNIEnv* jniEnv = static_cast<JNIEnv*>(SDL_AndroidGetJNIEnv());
-        JavaVM* javaVm = nullptr;
-        if (jniEnv)
-            jniEnv->GetJavaVM(&javaVm);
-        jobject activity = static_cast<jobject>(SDL_AndroidGetActivity());
-#endif
-
         setupExtensions();
 
         std::vector<const char*> cExtensionNames;
@@ -158,18 +114,10 @@ namespace XR
         XrInstance instance = XR_NULL_HANDLE;
         XrInstanceCreateInfo createInfo{};
         createInfo.type = XR_TYPE_INSTANCE_CREATE_INFO;
-        createInfo.enabledExtensionCount = static_cast<uint32_t>(cExtensionNames.size());
+        createInfo.enabledExtensionCount = cExtensionNames.size();
         createInfo.enabledExtensionNames = cExtensionNames.data();
         strcpy(createInfo.applicationInfo.applicationName, "openmw_vr");
         createInfo.applicationInfo.apiVersion = XR_CURRENT_API_VERSION;
-
-#ifdef XR_USE_PLATFORM_ANDROID
-        XrInstanceCreateInfoAndroidKHR androidCreateInfo{};
-        androidCreateInfo.type = XR_TYPE_INSTANCE_CREATE_INFO_ANDROID_KHR;
-        androidCreateInfo.applicationVM = javaVm;
-        androidCreateInfo.applicationActivity = activity;
-        createInfo.next = &androidCreateInfo;
-#endif
 
         auto res = CHECK_XRCMD(xrCreateInstance(&createInfo, &instance));
         if (!XR_SUCCEEDED(res))
@@ -202,7 +150,7 @@ namespace XR
         CHECK_XRCMD(xrEnumerateInstanceExtensionProperties(layerName, 0, &extensionCount, nullptr));
         availableExtensions.resize(extensionCount, extensionProperties);
         CHECK_XRCMD(xrEnumerateInstanceExtensionProperties(
-            layerName, static_cast<uint32_t>(availableExtensions.size()), &extensionCount, availableExtensions.data()));
+            layerName, availableExtensions.size(), &extensionCount, availableExtensions.data()));
 
         std::vector<std::string> extensionNames;
         const std::string indentStr(logIndent, ' ');

@@ -118,25 +118,25 @@ namespace MWPhysics
 
         btCompoundShape* compound = static_cast<btCompoundShape*>(mShapeInstance->mCollisionShape.get());
         bool result = false;
-        for (const auto& [recordIndex, shapeIndex] : mShapeInstance->mAnimatedShapes)
+        for (const auto& [recIndex, shapeIndex] : mShapeInstance->mAnimatedShapes)
         {
-            auto nodePathFound = mRecordIndexToNodePath.find(recordIndex);
-            if (nodePathFound == mRecordIndexToNodePath.end())
+            auto nodePathFound = mRecIndexToNodePath.find(recIndex);
+            if (nodePathFound == mRecIndexToNodePath.end())
             {
-                NifOsg::FindGroupByRecordIndex visitor(recordIndex);
+                NifOsg::FindGroupByRecIndex visitor(recIndex);
                 mPtr.getRefData().getBaseNode()->accept(visitor);
                 if (!visitor.mFound)
                 {
-                    Log(Debug::Warning) << "Warning: animateCollisionShapes can't find node " << recordIndex << " for "
+                    Log(Debug::Warning) << "Warning: animateCollisionShapes can't find node " << recIndex << " for "
                                         << mPtr.getCellRef().getRefId();
 
                     // Remove nonexistent nodes from animated shapes map and early out
-                    mShapeInstance->mAnimatedShapes.erase(recordIndex);
+                    mShapeInstance->mAnimatedShapes.erase(recIndex);
                     return false;
                 }
                 osg::NodePath nodePath = visitor.mFoundPath;
                 nodePath.erase(nodePath.begin());
-                nodePathFound = mRecordIndexToNodePath.emplace(recordIndex, nodePath).first;
+                nodePathFound = mRecIndexToNodePath.emplace(recIndex, nodePath).first;
             }
 
             osg::NodePath& nodePath = nodePathFound->second;

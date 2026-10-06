@@ -10,7 +10,6 @@
 #include "animationbindings.hpp"
 #include "camerabindings.hpp"
 #include "cellbindings.hpp"
-#include "contentbindings.hpp"
 #include "corebindings.hpp"
 #include "debugbindings.hpp"
 #include "inputbindings.hpp"
@@ -96,14 +95,6 @@ namespace MWLua
             // ## VR_PATCH BEGIN
             { "openmw.vr", initVRPackage(context) },
             // ## VR_PATCH END
-        };
-    }
-
-    std::map<std::string, sol::object> initLoadPackages(const Context& context)
-    {
-        return {
-            { "openmw.core", initCorePackage(context) },
-            { "openmw.content", initContentPackage(context) },
         };
     }
 }

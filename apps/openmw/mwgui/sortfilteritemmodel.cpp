@@ -79,6 +79,8 @@ namespace
             if (mSortByType && left.mType != right.mType)
                 return left.mType < right.mType;
 
+            float result = 0;
+
             // compare items by type
             auto leftType = left.mBase.getType();
             auto rightType = right.mBase.getType();
@@ -90,11 +92,9 @@ namespace
             std::string leftName = Utf8Stream::lowerCaseUtf8(left.mBase.getClass().getName(left.mBase));
             std::string rightName = Utf8Stream::lowerCaseUtf8(right.mBase.getClass().getName(right.mBase));
 
-            {
-                int result = leftName.compare(rightName);
-                if (result != 0)
-                    return result < 0;
-            }
+            result = leftName.compare(rightName);
+            if (result != 0)
+                return result < 0;
 
             // compare items by enchantment:
             // 1. enchanted items showed before non-enchanted
@@ -133,38 +133,32 @@ namespace
                 }
             }
 
-            {
-                int result = leftChargePercent - rightChargePercent;
-                if (result != 0)
-                    return result > 0;
-            }
+            result = leftChargePercent - rightChargePercent;
+            if (result != 0)
+                return result > 0;
 
             // compare items by condition
             if (left.mBase.getClass().hasItemHealth(left.mBase) && right.mBase.getClass().hasItemHealth(right.mBase))
             {
-                int result = left.mBase.getClass().getItemHealth(left.mBase)
+                result = left.mBase.getClass().getItemHealth(left.mBase)
                     - right.mBase.getClass().getItemHealth(right.mBase);
                 if (result != 0)
                     return result > 0;
             }
 
             // compare items by remaining usage time
-            {
-                float result = left.mBase.getClass().getRemainingUsageTime(left.mBase)
-                    - right.mBase.getClass().getRemainingUsageTime(right.mBase);
-                if (result != 0)
-                    return result > 0;
-            }
+            result = left.mBase.getClass().getRemainingUsageTime(left.mBase)
+                - right.mBase.getClass().getRemainingUsageTime(right.mBase);
+            if (result != 0)
+                return result > 0;
 
             // compare items by value
-            {
-                int result = left.mBase.getClass().getValue(left.mBase) - right.mBase.getClass().getValue(right.mBase);
-                if (result != 0)
-                    return result > 0;
-            }
+            result = left.mBase.getClass().getValue(left.mBase) - right.mBase.getClass().getValue(right.mBase);
+            if (result != 0)
+                return result > 0;
 
             // compare items by weight
-            float result = left.mBase.getClass().getWeight(left.mBase) - right.mBase.getClass().getWeight(right.mBase);
+            result = left.mBase.getClass().getWeight(left.mBase) - right.mBase.getClass().getWeight(right.mBase);
             if (result != 0)
                 return result > 0;
 
@@ -383,15 +377,16 @@ namespace MWGui
         mItems.clear();
         for (size_t i = 0; i < count; ++i)
         {
-            ItemStack item = mSourceModel->getItem(static_cast<ModelIndex>(i));
+            ItemStack item = mSourceModel->getItem(i);
 
-            for (const std::pair<MWWorld::Ptr, size_t>& drag : mDragItems)
+            for (std::vector<std::pair<MWWorld::Ptr, size_t>>::iterator it = mDragItems.begin(); it != mDragItems.end();
+                 ++it)
             {
-                if (item.mBase == drag.first)
+                if (item.mBase == it->first)
                 {
-                    if (item.mCount < drag.second)
+                    if (item.mCount < it->second)
                         throw std::runtime_error("Dragging more than present in the model");
-                    item.mCount -= drag.second;
+                    item.mCount -= it->second;
                 }
             }
 

@@ -1,10 +1,10 @@
 #ifndef XR_PLATFORM_HPP
 #define XR_PLATFORM_HPP
 
-#include <SDL_video.h>
 #include <memory>
 #include <string>
 #include <vector>
+#include <algorithm>
 
 #include <openxr/openxr.h>
 
@@ -21,7 +21,7 @@ namespace XR
     class Platform
     {
     public:
-        Platform(osg::GraphicsContext* gc, SDL_Window* window);
+        Platform(osg::GraphicsContext* gc);
         ~Platform();
 
         void selectGraphicsAPIExtension();
@@ -38,10 +38,8 @@ namespace XR
     private:
         bool selectDirectX();
         bool selectOpenGL();
-        bool selectOpenGLES();
 
         std::unique_ptr<PlatformPrivate> mPrivate;
-        SDL_Window* mWindow;
         std::shared_ptr<VR::DirectXWGLInterop> mDxInterop = nullptr;
         std::vector<int64_t> mRuntimeFormatsDX;
         std::vector<GLenum> mRuntimeFormatsGL;

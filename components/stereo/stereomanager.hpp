@@ -14,15 +14,6 @@
 
 #include "types.hpp"
 
-// Something is bringing these cursed defines in...
-#ifdef near
-#undef near
-#endif
-
-#ifdef far
-#undef far
-#endif
-
 namespace osg
 {
     class FrameBufferObject;
@@ -88,13 +79,13 @@ namespace Stereo
         //! @Param near defines distance to near camera clipping plane from view point.
         //! @Param far defines distance to far camera clipping plane from view point.
         //! @Param number of samples to use in the multiview framebuffer (if relevant).
-        explicit Manager(osgViewer::Viewer* viewer, bool enableStereo, float near, float far, int samples);
+        explicit Manager(osgViewer::Viewer* viewer, bool enableStereo, double near, double far, int samples);
         ~Manager();
 
         //! Called during update traversal
         void update();
 
-        void updateSettings(float near, float far)
+        void updateSettings(double near, double far)
         {
             mNear = near;
             mFar = far;
@@ -161,8 +152,8 @@ namespace Stereo
 //## VR_PATCH END
         bool mEyeResolutionOverriden;
         osg::Vec2i mEyeResolutionOverride;
-        float mNear;
-        float mFar;
+        double mNear;
+        double mFar;
         int mSamples = 0;
 
         std::array<View, 2> mView;

@@ -5,10 +5,7 @@
 
 local vr = require('openmw.vr')
 local util = require('openmw.util')
-local auxUtil = require('openmw_aux.util')
 local I = require('openmw.interfaces')
-
-local V3 = util.vector3
 
 if not vr.isVr() then
     return {}
@@ -22,13 +19,6 @@ end
 local unitsPerMeter = 69.99125109
 local customSpaces = {
 }
-
-local function ensurePose(pose)
-    pose = auxUtil.shallowCopy(pose or {})
-    pose.position = pose.position or V3(0,0,0)
-    pose.orientation = pose.orientation or util.transform.identity
-    return pose
-end
 
 --- Names of ActionSpace type spaces. These are trackers besides the HMD.
 -- @type ActionSpace
@@ -107,69 +97,9 @@ local function isActionSpaceSupported(space)
     return supportedActionSpaces[space] ~= nil
 end
 
-local function isDerivedSpace(name)
-    return customSpaces[name] ~= nil
-end
-
-local function getReferenceSpace(name)
-    if not isDerivedSpace(name) then
-        error('getReferenceSpace: Can only get origin space for derived spaces')
-    end
-    return customSpaces[name].reference
-end
-
 local function createDerivedSpace(name, reference, pose)
-    if not reference then
-        error('createDerivedSpace: reference cannot be nil')
-    end
     vr._createDerivedSpace(name, reference, pose)
-    customSpaces[name] = {
-        name = name,
-        reference = reference,
-        pose = ensurePose(pose),
-        offset = {
-            position = V3(0,0,0),
-            orientation = util.transform.identity,
-        }
-    }
-end
-
-local function offsetDerivedSpace(space, offset)
-    local cs = customSpaces[space]
-    if not cs then
-        error(tostring(space)..' is not an existing custom space')
-    end
-    offset = ensurePose(offset)
-    vr._createDerivedSpace(cs.name, cs.reference, I.vrspaces.poseUtils.add(cs.pose, offset))
-    cs.offset = offset
-end
-
-local function subtractPose(pose1, pose2)
-    local pos1 = pose1.position or util.vector3(0,0,0)
-    local ori1 = pose1.orientation or util.transform.identity
-    local pos2 = pose2.position or util.vector3(0,0,0)
-    local ori2 = pose2.orientation or util.transform.identity
-    local ori3 = ori2:inverse() * ori1
-    local pos3 = ori2:inverse() * (pos1 - pos2)
-
-    return {
-        position = pos3,
-        orientation = ori3,
-    }
-end
-
-local function addPose(pose1, pose2)
-    local pos1 = pose1.position or util.vector3(0,0,0)
-    local ori1 = pose1.orientation or util.transform.identity
-    local pos2 = pose2.position or util.vector3(0,0,0)
-    local ori2 = pose2.orientation or util.transform.identity
-    local pos3 = pos1 + ori1 * pos2
-    local ori3 = ori1 * ori2
-
-    return {
-        position = pos3,
-        orientation = ori3,
-    }
+    customSpaces[name] = name
 end
 
 return {
@@ -204,14 +134,6 @@ return {
         -- @param #Pose pose The offset from the reference.
         createDerivedSpace = createDerivedSpace,
 
-        --- Offset a derived space.
-        -- Add a fixed offset to a derived space. This is added to the existing offset passed to createDerivedSpace.
-        -- This function is used by the spaceOffset setting type to implement user configurable spaces.
-        -- @function [parent=#vrspaces]
-        -- @param #string name The derived space name. Must be an existing custom space. Action or reference spaces must be true and cannot be offset.
-        -- @param #Pose pose
-        offsetDerivedSpace = offsetDerivedSpace,
-
         --- Check if a reference space is supported.
         -- @function [parent=#vrspaces] isReferenceSpaceSupported
         -- @param #ReferenceSpace name The name of the reference space
@@ -225,14 +147,7 @@ return {
         --- Check if the given string is the name of an action space
         -- @function [parent=#vrspaces] isActionSpace
         -- @param #string name
-        -- @return #boolean
         isActionSpace = isActionSpace,
-
-        --- Check if the given string is the name of a custom space
-        -- @function [parent=#vrspaces] isDerivedSpace
-        -- @param #string name
-        -- @return #boolean
-        isDerivedSpace = isDerivedSpace,
 
         --- Check if the given string is the name of a reference space
         -- @function [parent=#vrspaces] isReferenceSpace
@@ -269,10 +184,5 @@ return {
         -- Note that this will reset physical sneak reference height, and is best only used at the request of the user.
         -- @function [parent=#vrspaces] recenterZ
         recenterZ = vr._recenterZ,
-
-        poseUtils = {
-            subtract = subtractPose,
-            add = addPose,
-        },
     }
 }

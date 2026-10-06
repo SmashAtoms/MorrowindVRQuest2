@@ -35,6 +35,7 @@ namespace MWMechanics
 {
     class Actor;
     class CharacterController;
+    class CreatureStats;
     class SidingCache;
 
     class Actors
@@ -127,7 +128,7 @@ namespace MWMechanics
 
         bool isAnyObjectInRange(const osg::Vec3f& position, float radius) const;
 
-        void cleanupSummonedCreature(ESM::RefNum creature) const;
+        void cleanupSummonedCreature(CreatureStats& casterStats, int creatureActorId) const;
 
         /// Returns the list of actors which are siding with the given actor in fights
         /**ie AiFollow or AiEscort is active and the target is the actor **/
@@ -164,6 +165,7 @@ namespace MWMechanics
         int getGreetingTimer(const MWWorld::Ptr& ptr) const;
         float getAngleToPlayer(const MWWorld::Ptr& ptr) const;
         GreetingState getGreetingState(const MWWorld::Ptr& ptr) const;
+        bool isTurningToPlayer(const MWWorld::Ptr& ptr) const;
 
     private:
         std::map<ESM::RefId, int> mDeathCount;
@@ -187,7 +189,7 @@ namespace MWMechanics
 
         void killDeadActors();
 
-        void purgeSpellEffects(ESM::RefNum creature) const;
+        void purgeSpellEffects(int casterActorId) const;
 
         void predictAndAvoidCollisions(float duration) const;
 

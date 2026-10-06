@@ -175,27 +175,27 @@ namespace
                 if (!mgef)
                 {
                     Log(Debug::Verbose) << RecordType::getRecordType() << " " << spell.mId
-                                        << ": dropping invalid effect (" << iter->mData.mEffectID << ")";
+                                        << ": dropping invalid effect (index " << iter->mData.mEffectID << ")";
                     iter = spell.mEffects.mList.erase(iter);
                     changed = true;
                     continue;
                 }
 
-                if (!(mgef->mData.mFlags & ESM::MagicEffect::TargetAttribute) && !iter->mData.mAttribute.empty())
+                if (!(mgef->mData.mFlags & ESM::MagicEffect::TargetAttribute) && iter->mData.mAttribute != -1)
                 {
-                    iter->mData.mAttribute = ESM::RefId();
+                    iter->mData.mAttribute = -1;
                     Log(Debug::Verbose) << RecordType::getRecordType() << " " << spell.mId
-                                        << ": dropping unexpected attribute argument of " << iter->mData.mEffectID
-                                        << " effect";
+                                        << ": dropping unexpected attribute argument of "
+                                        << ESM::MagicEffect::indexToGmstString(iter->mData.mEffectID) << " effect";
                     changed = true;
                 }
 
-                if (!(mgef->mData.mFlags & ESM::MagicEffect::TargetSkill) && !iter->mData.mSkill.empty())
+                if (!(mgef->mData.mFlags & ESM::MagicEffect::TargetSkill) && iter->mData.mSkill != -1)
                 {
-                    iter->mData.mSkill = ESM::RefId();
+                    iter->mData.mSkill = -1;
                     Log(Debug::Verbose) << RecordType::getRecordType() << " " << spell.mId
-                                        << ": dropping unexpected skill argument of " << iter->mData.mEffectID
-                                        << " effect";
+                                        << ": dropping unexpected skill argument of "
+                                        << ESM::MagicEffect::indexToGmstString(iter->mData.mEffectID) << " effect";
                     changed = true;
                 }
 
@@ -525,6 +525,7 @@ namespace MWWorld
             store->setUp();
 
         getWritable<ESM::Skill>().setUp(get<ESM::GameSetting>());
+        getWritable<ESM::MagicEffect>().setUp();
         getWritable<ESM::Attribute>().setUp(get<ESM::GameSetting>());
         getWritable<ESM4::Land>().updateLandPositions(get<ESM4::Cell>());
         getWritable<ESM4::Reference>().preprocessReferences(get<ESM4::Cell>());
@@ -680,7 +681,7 @@ namespace MWWorld
         }
     }
 
-    size_t ESMStore::countSavedGameRecords() const
+    int ESMStore::countSavedGameRecords() const
     {
         return 1 // DYNA (dynamic name counter)
             + get<ESM::Potion>().getDynamicSize() + get<ESM::Armor>().getDynamicSize()
@@ -690,9 +691,7 @@ namespace MWWorld
             + get<ESM::Activator>().getDynamicSize() + get<ESM::Miscellaneous>().getDynamicSize()
             + get<ESM::Weapon>().getDynamicSize() + get<ESM::CreatureLevList>().getDynamicSize()
             + get<ESM::ItemLevList>().getDynamicSize() + get<ESM::Creature>().getDynamicSize()
-            + get<ESM::Container>().getDynamicSize() + get<ESM::Light>().getDynamicSize()
-            + get<ESM::Static>().getDynamicSize() + get<ESM::Door>().getDynamicSize()
-            + get<ESM::Probe>().getDynamicSize();
+            + get<ESM::Container>().getDynamicSize() + get<ESM::Light>().getDynamicSize();
     }
 
     void ESMStore::write(ESM::ESMWriter& writer, Loading::Listener& progress) const
@@ -719,9 +718,6 @@ namespace MWWorld
         get<ESM::Creature>().write(writer, progress);
         get<ESM::Container>().write(writer, progress);
         get<ESM::Light>().write(writer, progress);
-        get<ESM::Static>().write(writer, progress);
-        get<ESM::Door>().write(writer, progress);
-        get<ESM::Probe>().write(writer, progress);
     }
 
     bool ESMStore::readRecord(ESM::ESMReader& reader, uint32_t typeId)
@@ -747,9 +743,6 @@ namespace MWWorld
             case ESM::REC_LEVI:
             case ESM::REC_LEVC:
             case ESM::REC_LIGH:
-            case ESM::REC_STAT:
-            case ESM::REC_DOOR:
-            case ESM::REC_PROB:
                 mStoreImp->mRecNameToStore[type]->read(reader, true);
                 return true;
 

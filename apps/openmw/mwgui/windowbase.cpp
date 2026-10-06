@@ -19,29 +19,19 @@
 //## VR_PATCH END
 using namespace MWGui;
 
-size_t MWGui::wrap(size_t index, size_t max, int delta)
+int MWGui::wrap(int index, int max)
 {
-    if (max == 0)
+    if (index < 0)
+        return max - 1;
+    else if (index >= max)
         return 0;
-    if (delta >= 0)
-    {
-        unsigned absDelta = static_cast<unsigned>(delta);
-        if (absDelta >= max)
-            return 0;
-        else if (index >= max - absDelta)
-            return 0;
-        return index + absDelta;
-    }
-    size_t absDelta = static_cast<size_t>(-static_cast<ptrdiff_t>(delta));
-    index = std::min(index, max);
-    if (index >= absDelta)
-        return index - absDelta;
-    return max - 1;
+    else
+        return index;
 }
 
-void MWGui::setControllerFocus(const std::vector<MyGUI::Button*>& buttons, size_t index, bool focused)
+void MWGui::setControllerFocus(const std::vector<MyGUI::Button*>& buttons, int index, bool focused)
 {
-    if (index < buttons.size())
+    if (index >= 0 && index < static_cast<int>(buttons.size()))
         buttons[index]->setStateSelected(focused);
 }
 
@@ -239,14 +229,16 @@ float BookWindowBase::adjustButton(std::string_view name)
     WindowBase::getWidget(button, name);
     MyGUI::IntSize requested = button->getRequestedSize();
     float scale = float(requested.height) / button->getSize().height;
-    MyGUI::IntSize newSize(static_cast<int>(requested.width / scale), static_cast<int>(requested.height / scale));
+    MyGUI::IntSize newSize = requested;
+    newSize.width /= scale;
+    newSize.height /= scale;
     button->setSize(newSize);
 
     if (button->getAlign().isRight())
     {
         MyGUI::IntSize diff = (button->getSize() - requested);
-        diff.width = static_cast<int>(diff.width / scale);
-        diff.height = static_cast<int>(diff.height / scale);
+        diff.width /= scale;
+        diff.height /= scale;
         button->setPosition(button->getPosition() + MyGUI::IntPoint(diff.width, 0));
     }
 

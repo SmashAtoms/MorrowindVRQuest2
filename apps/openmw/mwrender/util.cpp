@@ -16,9 +16,10 @@ namespace MWRender
 {
     namespace
     {
-        struct TextureOverrideVisitor : osg::NodeVisitor
+        class TextureOverrideVisitor : public osg::NodeVisitor
         {
-            explicit TextureOverrideVisitor(VFS::Path::NormalizedView texture, Resource::ResourceSystem* resourcesystem)
+        public:
+            TextureOverrideVisitor(std::string_view texture, Resource::ResourceSystem* resourcesystem)
                 : osg::NodeVisitor(TRAVERSE_ALL_CHILDREN)
                 , mTexture(texture)
                 , mResourcesystem(resourcesystem)
@@ -35,25 +36,23 @@ namespace MWRender
                 }
                 traverse(node);
             }
-
-            VFS::Path::NormalizedView mTexture;
+            std::string_view mTexture;
             Resource::ResourceSystem* mResourcesystem;
         };
     }
 
-    void overrideFirstRootTexture(
-        VFS::Path::NormalizedView texture, Resource::ResourceSystem* resourceSystem, osg::Node& node)
+    void overrideFirstRootTexture(std::string_view texture, Resource::ResourceSystem* resourceSystem, osg::Node& node)
     {
         TextureOverrideVisitor overrideVisitor(texture, resourceSystem);
         node.accept(overrideVisitor);
     }
 
-    void overrideTexture(VFS::Path::NormalizedView texture, Resource::ResourceSystem* resourceSystem, osg::Node& node)
+    void overrideTexture(std::string_view texture, Resource::ResourceSystem* resourceSystem, osg::Node& node)
     {
         if (texture.empty())
             return;
         const VFS::Path::Normalized correctedTexture
-            = Misc::ResourceHelpers::correctTexturePath(texture, *resourceSystem->getVFS());
+            = Misc::ResourceHelpers::correctTexturePath(texture, resourceSystem->getVFS());
         // Not sure if wrap settings should be pulled from the overridden texture?
         osg::ref_ptr<osg::Texture2D> tex
             = new osg::Texture2D(resourceSystem->getImageManager()->getImage(correctedTexture));
