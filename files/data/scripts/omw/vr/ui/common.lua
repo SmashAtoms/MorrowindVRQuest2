@@ -236,7 +236,7 @@ local function createDefaultConfig(backgroundOpacity, autosize)
         center = util.vector2(0,0),
         extent = util.vector2(1,1),
         pixelsPerMeter = 1024,
-        pixelResolution = util.vector2(1024, 1024),
+        pixelResolution = util.vector2(1024, 768),
         autosize = autosize,
     }
 end

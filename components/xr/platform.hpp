@@ -38,6 +38,7 @@ namespace XR
     private:
         bool selectDirectX();
         bool selectOpenGL();
+        bool selectOpenGLES();
 
         std::unique_ptr<PlatformPrivate> mPrivate;
         std::shared_ptr<VR::DirectXWGLInterop> mDxInterop = nullptr;

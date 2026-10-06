@@ -164,8 +164,10 @@ namespace Resource
                     // requires update to getColor() to be released with OSG 3.6
                     osg::ref_ptr<osg::Image> newImage = new osg::Image;
                     newImage->setFileName(image->getFileName());
-                    newImage->allocateImage(image->s(), image->t(), image->r(),
-                        image->isImageTranslucent() ? GL_RGBA : GL_RGB, GL_UNSIGNED_BYTE);
+                    newImage->setOrigin(image->getOrigin());
+                    // Always RGBA: an NPOT-width GL_RGB image hits GL_UNPACK_ALIGNMENT row padding on
+                    // gl4es/GLES, shearing the texture into vertical stripes. RGBA is always 4-aligned.
+                    newImage->allocateImage(image->s(), image->t(), image->r(), GL_RGBA, GL_UNSIGNED_BYTE);
                     for (int s = 0; s < image->s(); ++s)
                         for (int t = 0; t < image->t(); ++t)
                             for (int r = 0; r < image->r(); ++r)
@@ -185,6 +187,28 @@ namespace Resource
                             newImage->setColor(image->getColor(s, t, r), s, t, r);
                 image = newImage;
             }
+
+#ifdef __ANDROID__
+            // GLES/gl4es mishandles GL_BGRA source data (garbled/striped). Convert to native RGBA on
+            // the CPU so the upload is clean. (getColor reads BGRA correctly; setColor writes RGBA.)
+            if (!image->isCompressed()
+                && (image->getPixelFormat() == GL_BGRA || image->getPixelFormat() == GL_BGR))
+            {
+                osg::ref_ptr<osg::Image> rgba = new osg::Image;
+                rgba->setFileName(image->getFileName());
+                rgba->setOrigin(image->getOrigin());
+                rgba->allocateImage(image->s(), image->t(), image->r(), GL_RGBA, GL_UNSIGNED_BYTE);
+                for (int s = 0; s < image->s(); ++s)
+                    for (int t = 0; t < image->t(); ++t)
+                        for (int r = 0; r < image->r(); ++r)
+                            rgba->setColor(image->getColor(s, t, r), s, t, r);
+                image = rgba;
+            }
+            // OSG's default unpack alignment (4) shears tightly-packed RGB textures of NPOT width into
+            // vertical stripes under gl4es/GLES. Our image data is tightly packed, so alignment must be 1.
+            if (!image->isCompressed())
+                image->setPacking(1);
+#endif
 
             mCache->addEntryToObjectCache(path.value(), image);
             return image;

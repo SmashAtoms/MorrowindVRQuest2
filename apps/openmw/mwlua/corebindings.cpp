@@ -4,6 +4,7 @@
 #include <stdexcept>
 
 #include <components/debug/debuglog.hpp>
+#include <components/fallback/fallback.hpp>
 #include <components/lua/l10n.hpp>
 #include <components/lua/luastate.hpp>
 #include <components/lua/serialization.hpp>
@@ -118,12 +119,17 @@ namespace MWLua
             = context.cachePackage("openmw_core_dialogue", [context]() { return initCoreDialogueBindings(context); });
         api["l10n"] = context.cachePackage("openmw_core_l10n",
             [lua]() { return LuaUtil::initL10nLoader(lua, MWBase::Environment::get().getL10nManager()); });
-        const MWWorld::Store<ESM::GameSetting>* gmstStore
-            = &MWBase::Environment::get().getESMStore()->get<ESM::GameSetting>();
-        api["getGMST"] = [lua, gmstStore](const std::string& setting) -> sol::object {
-            const ESM::GameSetting* gmst = gmstStore->search(setting);
+        api["getGMST"] = [lua](const std::string& setting) -> sol::object {
+            // The menu context can precede content loading; resolve the current store on each call.
+            const auto& gmstStore = MWBase::Environment::get().getESMStore()->get<ESM::GameSetting>();
+            const ESM::GameSetting* gmst = gmstStore.search(setting);
             if (gmst == nullptr)
+            {
+                for (const auto& [key, value] : Fallback::Map::getNonNumericFallbackMap())
+                    if (Misc::StringUtils::ciEqual(key, setting))
+                        return sol::make_object<std::string>(lua, value);
                 return sol::nil;
+            }
             const ESM::Variant& value = gmst->mValue;
             switch (value.getType())
             {
