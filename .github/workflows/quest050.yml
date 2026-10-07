@@ -69,7 +69,7 @@ jobs:
         with:
           name: Quest050-diagnostics-${{ github.sha }}
           path: |
-            android/quest050-native-build.log
+            quest050-native-build.log
             android/buildscripts/symbols/arm64-v8a/
             android/buildscripts/build/arm64/**/CMakeFiles/CMake*.log
             android/buildscripts/build/arm64/**/CMakeFiles/CMakeConfigureLog.yaml
