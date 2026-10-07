@@ -40,8 +40,7 @@ jobs:
             android/buildscripts/toolchain
             android/buildscripts/prefix
             android/buildscripts/build
-          key: quest050-native-v1-${{ runner.os }}-${{ hashFiles('android/buildscripts/**') }}
-          restore-keys: quest050-native-v1-${{ runner.os }}-
+          key: quest050-native-v2-${{ runner.os }}-${{ hashFiles('android/buildscripts/**') }}
       - name: Compile native ARM64 engine
         shell: bash
         run: |
